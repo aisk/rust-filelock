@@ -1,0 +1,10 @@
+[package]
+name = "filelock"
+version = "0.0.1"
+edition = "2018"
+description = "filelock for rust, work in progress"
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
