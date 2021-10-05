@@ -1,24 +1,51 @@
+extern crate errno;
 extern crate libc;
 
-use std::fs::File;
-use std::os::unix::io::AsRawFd;
+use std::ffi::CString;
 
 
 pub struct FileLock {
-    filename: String
+    filename: String,
+    fd: libc::c_int,
 }
 
 impl FileLock {
     pub fn new(filename: &str) -> FileLock {
-        return FileLock{filename: filename.to_string()}
+        return FileLock{filename: filename.to_string(), fd: 0}
     }
 
-    pub fn lock(self) {
-        let f = File::open(self.filename).unwrap();
+    pub fn lock(&mut self) -> Result<(), errno::Errno> {
         unsafe {
-            let r = libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB);
-            println!("r: {}", r);
+            #[allow(temporary_cstring_as_ptr)]
+            let fd = libc::open(CString::new(self.filename.as_str()).unwrap().as_ptr(), libc::O_RDWR | libc::O_CREAT | libc::O_TRUNC, 0o644);
+            if fd < 0 {
+                return Err(errno::errno());
+            }
+            self.fd = fd;
+
+            if libc::flock(fd, libc::LOCK_EX) != 0 {
+                return Err(errno::errno());
+            }
+            return Ok(());
         }
+    }
+
+    pub fn unlock(&mut self) -> Result<(), errno::Errno> {
+        let fd = self.fd;
+
+        unsafe {
+            if libc::flock(fd, libc::LOCK_UN) != 0 {
+                return Err(errno::errno());
+            }
+
+            if libc::close(fd) != 0 {
+                return Err(errno::errno());
+            }
+        }
+
+        self.fd = 0;
+
+        return Ok(());
     }
 }
 
@@ -27,6 +54,8 @@ mod tests {
     #[test]
     fn it_works() {
         assert_eq!(2 + 2, 4);
-        super::FileLock::new("/tmp/test.lock").lock();
+        let mut lock = super::FileLock::new("/tmp/test.lock");
+        lock.lock().unwrap();
+        lock.unlock().unwrap();
     }
 }
