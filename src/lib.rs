@@ -17,7 +17,7 @@ impl FileLock {
     pub fn lock(&mut self) -> Result<(), errno::Errno> {
         unsafe {
             #[allow(temporary_cstring_as_ptr)]
-            let fd = libc::open(CString::new(self.filename.as_str()).unwrap().as_ptr(), libc::O_RDWR | libc::O_CREAT | libc::O_TRUNC, 0o644);
+            let fd = libc::open(CString::new(self.filename.as_str()).unwrap().as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o644);
             if fd < 0 {
                 return Err(errno::errno());
             }
