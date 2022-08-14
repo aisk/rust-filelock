@@ -1,6 +1,6 @@
 # filelock
 
-Simple filelock library for rust.
+Simple filelock library for rust, using `flock` on Unix-like systems and `LockFileEx` on Windows under the hood.
 
 ## License
 
