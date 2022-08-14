@@ -11,7 +11,7 @@ license = "MIT"
 errno = "^0.2"
 
 [target.'cfg(windows)'.dependencies]
-winapi = "^0.3"
+winapi = { version = "^0.3", features = ["handleapi"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "^0.2"

@@ -13,7 +13,7 @@ mod tests {
     #[test]
     fn it_works() {
         assert_eq!(2 + 2, 4);
-        let mut lock = super::FileLock::new("/tmp/test.lock");
+        let mut lock = super::FileLock::new("test.lock");
         lock.lock().unwrap();
         lock.unlock().unwrap();
     }
