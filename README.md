@@ -12,7 +12,7 @@ $ cargo add filelock
 
 ## Documentation
 
-See https://docs.rs/filelock/0.3.0/filelock/.
+See https://docs.rs/filelock/latest/filelock/.
 
 ## License
 
