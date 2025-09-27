@@ -1,6 +1,6 @@
 [package]
 name = "filelock"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 description = "Cross-platform file locking library for Rust"
 authors = ["AN Long<aisk1988@gmail.com>"]
