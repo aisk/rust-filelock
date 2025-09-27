@@ -41,3 +41,13 @@ fn test_lock_file_creation() {
     assert!(std::path::Path::new(filename).exists());
     drop(guard);
 }
+
+#[test]
+fn test_manual_unlock() {
+    let mut lock = FileLock::new("test_manual.lock");
+    let guard = lock.lock().unwrap();
+
+    guard.unlock().unwrap();
+
+    let _guard2 = lock.lock().unwrap();
+}
