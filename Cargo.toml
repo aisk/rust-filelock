@@ -1,11 +1,9 @@
 [package]
 name = "filelock"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 description = "filelock for rust, work in progress"
 license = "MIT"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 errno = "^0.2"
