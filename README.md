@@ -4,6 +4,10 @@
 
 Simple filelock library for rust, using `flock` on Unix-like systems and `LockFileEx` on Windows under the hood.
 
+![](https://repository-images.githubusercontent.com/403675076/cd5f3635-33cf-4905-8315-1e7aee048c0d)
+
+*Image by Homutan, source: https://www.pixiv.net/artworks/128080460*
+
 ## Installation
 
 ```sh
