@@ -17,21 +17,20 @@ fn test_double_lock_same_instance() {
     let _guard2 = lock.lock().unwrap();
 }
 
+#[cfg(unix)]
 #[test]
 fn test_file_permissions() {
-    if cfg!(unix) {
-        use std::fs::File;
-        use std::os::unix::fs::PermissionsExt;
+    use std::fs::File;
+    use std::os::unix::fs::PermissionsExt;
 
-        let filename = "test_permissions.lock";
-        File::create(filename).unwrap();
-        std::fs::set_permissions(filename, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let filename = "test_permissions.lock";
+    File::create(filename).unwrap();
+    std::fs::set_permissions(filename, std::fs::Permissions::from_mode(0o000)).unwrap();
 
-        let mut lock = FileLock::new(filename);
-        let result = lock.lock();
-        assert!(result.is_err());
+    let mut lock = FileLock::new(filename);
+    let result = lock.lock();
+    assert!(result.is_err());
 
-        std::fs::set_permissions(filename, std::fs::Permissions::from_mode(0o644)).unwrap();
-        std::fs::remove_file(filename).unwrap();
-    }
+    std::fs::set_permissions(filename, std::fs::Permissions::from_mode(0o644)).unwrap();
+    std::fs::remove_file(filename).unwrap();
 }
