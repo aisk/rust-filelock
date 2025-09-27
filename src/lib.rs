@@ -3,10 +3,8 @@
 //! ## Usage
 //!
 //! ```rust
-//! use filelock::FileLock;
-//!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let mut lock = FileLock::new("myfile.lock");
+//!     let mut lock = filelock::new("myfile.lock");
 //!     let _guard = lock.lock()?;
 //!
 //!     // Perform critical operations
@@ -19,10 +17,8 @@
 //! For manual control:
 //!
 //! ```rust
-//! use filelock::FileLock;
-//!
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let mut lock = FileLock::new("myfile.lock");
+//!     let mut lock = filelock::new("myfile.lock");
 //!     let guard = lock.lock()?;
 //!
 //!     // Perform critical operations
