@@ -18,7 +18,7 @@ impl FileLock {
 
     pub fn lock(&mut self) -> Result<(), errno::Errno> {
         unsafe {
-            #[allow(temporary_cstring_as_ptr)]
+            #[allow(dangling_pointers_from_temporaries)]
             let fd = libc::open(
                 CString::new(self.filename.as_str()).unwrap().as_ptr(),
                 libc::O_RDWR | libc::O_CREAT,

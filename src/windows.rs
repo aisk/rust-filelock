@@ -16,7 +16,7 @@ impl FileLock {
     }
 
     pub fn lock(&mut self) -> Result<(), errno::Errno> {
-        #[allow(temporary_cstring_as_ptr)]
+        #[allow(dangling_pointers_from_temporaries)]
         unsafe {
             let handle = winapi::um::fileapi::CreateFileA(
                 CString::new(self.filename.as_str()).unwrap().as_ptr(),
