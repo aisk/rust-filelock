@@ -1,7 +1,7 @@
 extern crate winapi;
 
-use std::ffi::CString;
 use crate::FileLockGuard;
+use std::ffi::CString;
 
 pub struct FileLock {
     filename: String,
