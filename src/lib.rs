@@ -1,3 +1,6 @@
+mod guard;
+pub use guard::FileLockGuard;
+
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
@@ -18,7 +21,6 @@ mod tests {
     fn it_works() {
         assert_eq!(2 + 2, 4);
         let mut lock = super::new("test.lock");
-        lock.lock().unwrap();
-        lock.unlock().unwrap();
+        let _guard = lock.lock().unwrap();
     }
 }

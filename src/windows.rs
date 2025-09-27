@@ -1,6 +1,7 @@
 extern crate winapi;
 
 use std::ffi::CString;
+use crate::FileLockGuard;
 
 pub struct FileLock {
     filename: String,
@@ -15,7 +16,7 @@ impl FileLock {
         };
     }
 
-    pub fn lock(&mut self) -> Result<(), errno::Errno> {
+    pub fn lock(&mut self) -> Result<FileLockGuard<'_>, errno::Errno> {
         #[allow(dangling_pointers_from_temporaries)]
         unsafe {
             let handle = winapi::um::fileapi::CreateFileA(
@@ -46,10 +47,10 @@ impl FileLock {
                 return Err(errno::errno());
             }
         }
-        return Ok(());
+        return Ok(FileLockGuard::new(self));
     }
 
-    pub fn unlock(&mut self) -> Result<(), errno::Errno> {
+    pub(crate) fn unlock(&mut self) -> Result<(), errno::Errno> {
         unsafe {
             let mut overlapped: winapi::um::minwinbase::OVERLAPPED = winapi::_core::mem::zeroed();
             let unlocked = winapi::um::fileapi::UnlockFileEx(

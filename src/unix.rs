@@ -2,6 +2,7 @@ extern crate errno;
 extern crate libc;
 
 use std::ffi::CString;
+use crate::FileLockGuard;
 
 pub struct FileLock {
     filename: String,
@@ -16,7 +17,7 @@ impl FileLock {
         };
     }
 
-    pub fn lock(&mut self) -> Result<(), errno::Errno> {
+    pub fn lock(&mut self) -> Result<FileLockGuard<'_>, errno::Errno> {
         unsafe {
             #[allow(dangling_pointers_from_temporaries)]
             let fd = libc::open(
@@ -32,11 +33,11 @@ impl FileLock {
             if libc::flock(fd, libc::LOCK_EX) != 0 {
                 return Err(errno::errno());
             }
-            return Ok(());
+            return Ok(FileLockGuard::new(self));
         }
     }
 
-    pub fn unlock(&mut self) -> Result<(), errno::Errno> {
+    pub(crate) fn unlock(&mut self) -> Result<(), errno::Errno> {
         let fd = self.fd;
 
         unsafe {
