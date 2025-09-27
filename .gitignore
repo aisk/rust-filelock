@@ -8,4 +8,4 @@
 #/target
 Cargo.lock
 
-test.lock
+*.lock
