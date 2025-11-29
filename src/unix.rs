@@ -55,3 +55,10 @@ impl FileLock {
         return Ok(());
     }
 }
+
+impl Drop for FileLock {
+    fn drop(&mut self) {
+        // Try to delete the lock file, allow failure
+        let _ = std::fs::remove_file(&self.filename);
+    }
+}
