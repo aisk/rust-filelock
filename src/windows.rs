@@ -4,35 +4,46 @@ use crate::FileLockGuard;
 use std::ffi::CString;
 
 pub struct FileLock {
-    filename: String,
     handle: winapi::um::winnt::HANDLE,
+    create_error: Option<errno::Errno>,
 }
 
 impl FileLock {
     pub fn new(filename: &str) -> FileLock {
-        return FileLock {
-            filename: filename.to_string(),
-            handle: winapi::shared::ntdef::NULL,
-        };
-    }
-
-    pub fn lock(&mut self) -> Result<FileLockGuard<'_>, errno::Errno> {
         #[allow(dangling_pointers_from_temporaries)]
-        unsafe {
-            let handle = winapi::um::fileapi::CreateFileA(
-                CString::new(self.filename.as_str()).unwrap().as_ptr(),
-                winapi::um::winnt::GENERIC_READ,
+        let handle = unsafe {
+            winapi::um::fileapi::CreateFileA(
+                CString::new(filename).unwrap().as_ptr(),
+                winapi::um::winnt::GENERIC_READ | winapi::um::winnt::GENERIC_WRITE,
                 winapi::um::winnt::FILE_SHARE_READ | winapi::um::winnt::FILE_SHARE_WRITE,
                 0 as *mut winapi::um::minwinbase::SECURITY_ATTRIBUTES,
                 winapi::um::fileapi::OPEN_ALWAYS,
                 winapi::um::winnt::FILE_ATTRIBUTE_NORMAL,
                 winapi::shared::ntdef::NULL,
-            );
-            if handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
-                return Err(errno::errno());
-            }
-            self.handle = handle;
+            )
+        };
 
+        // Save error if CreateFileA failed, to avoid errno race conditions
+        let create_error = if handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
+            Some(errno::errno())
+        } else {
+            None
+        };
+
+        return FileLock {
+            handle: handle,
+            create_error: create_error,
+        };
+    }
+
+    pub fn lock(&mut self) -> Result<FileLockGuard<'_>, errno::Errno> {
+        // Check if file handle is valid from new()
+        if self.handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
+            return Err(self.create_error.unwrap_or(errno::errno()));
+        }
+
+        #[allow(dangling_pointers_from_temporaries)]
+        unsafe {
             let mut overlapped: winapi::um::minwinbase::OVERLAPPED = winapi::_core::mem::zeroed();
             let locked = winapi::um::fileapi::LockFileEx(
                 self.handle,
@@ -44,8 +55,6 @@ impl FileLock {
             );
 
             if locked != winapi::shared::minwindef::TRUE {
-                winapi::um::handleapi::CloseHandle(self.handle);
-                self.handle = winapi::shared::ntdef::NULL;
                 return Err(errno::errno());
             }
         }
@@ -67,13 +76,19 @@ impl FileLock {
                 return Err(errno::errno());
             }
 
-            if winapi::um::handleapi::CloseHandle(self.handle) == winapi::shared::minwindef::FALSE {
-                return Err(errno::errno());
-            }
+            // Don't close handle here - it will be closed when FileLock is dropped
         }
 
-        self.handle = winapi::shared::ntdef::NULL;
-
         return Ok(());
+    }
+}
+
+impl Drop for FileLock {
+    fn drop(&mut self) {
+        if self.handle != winapi::shared::ntdef::NULL && self.handle != winapi::um::handleapi::INVALID_HANDLE_VALUE {
+            unsafe {
+                winapi::um::handleapi::CloseHandle(self.handle);
+            }
+        }
     }
 }
