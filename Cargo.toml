@@ -14,7 +14,7 @@ categories = ["filesystem", "concurrency"]
 errno = "^0.3"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "^0.3", features = ["handleapi"] }
+winapi = { version = "^0.3", features = ["handleapi", "fileapi"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "^0.2"
