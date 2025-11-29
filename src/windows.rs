@@ -44,6 +44,8 @@ impl FileLock {
             );
 
             if locked != winapi::shared::minwindef::TRUE {
+                winapi::um::handleapi::CloseHandle(self.handle);
+                self.handle = winapi::shared::ntdef::NULL;
                 return Err(errno::errno());
             }
         }
