@@ -51,3 +51,22 @@ fn test_manual_unlock() {
 
     let _guard2 = lock.lock().unwrap();
 }
+
+#[test]
+fn test_lock_file_cleanup() {
+    let filename = "test_cleanup.lock";
+
+    // Ensure the file doesn't exist initially
+    let _ = std::fs::remove_file(filename);
+
+    {
+        let mut lock = FileLock::new(filename);
+        let _guard = lock.lock().unwrap();
+
+        // Verify the lock file exists while locked
+        assert!(std::path::Path::new(filename).exists(), "Lock file should exist while locked");
+    } // lock goes out of scope here, should be dropped and file deleted
+
+    // Verify the lock file is deleted after FileLock is dropped
+    assert!(!std::path::Path::new(filename).exists(), "Lock file should be deleted after FileLock is dropped");
+}

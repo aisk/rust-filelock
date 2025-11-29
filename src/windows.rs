@@ -6,6 +6,7 @@ use std::ffi::CString;
 pub struct FileLock {
     handle: winapi::um::winnt::HANDLE,
     create_error: Option<errno::Errno>,
+    filename: String,
 }
 
 impl FileLock {
@@ -33,6 +34,7 @@ impl FileLock {
         return FileLock {
             handle: handle,
             create_error: create_error,
+            filename: filename.to_string(),
         };
     }
 
@@ -90,5 +92,8 @@ impl Drop for FileLock {
                 winapi::um::handleapi::CloseHandle(self.handle);
             }
         }
+
+        // Try to delete the lock file, allow failure
+        let _ = std::fs::remove_file(&self.filename);
     }
 }
