@@ -1,60 +1,50 @@
 use filelock::FileLock;
 
 #[test]
-fn test_basic_lock_unlock() {
-    let mut lock = FileLock::new("test_basic.lock");
+fn test_basic_lock_and_unlock() {
+    let filename = "test_basic.lock";
+    let mut lock = FileLock::new(filename);
+
+    // Test manual unlock
     let guard = lock.lock().unwrap();
-    drop(guard);
-    let _guard2 = lock.lock().unwrap();
+    guard.unlock().unwrap();
+
+    // Test RAII-style unlock
+    let _guard = lock.lock().unwrap();
+    // Guard is automatically dropped when it goes out of scope
 }
 
 #[test]
-fn test_scope_based_locking() {
-    let mut lock = FileLock::new("test_scope.lock");
+fn test_raii_automatic_unlock() {
+    let filename = "test_raii.lock";
+    let mut lock = FileLock::new(filename);
 
     {
         let _guard = lock.lock().unwrap();
+        // Lock is held within this scope
     }
 
-    {
-        let _guard = lock.lock().unwrap();
-    }
+    // Lock should be automatically released, we can acquire it again
+    let _guard = lock.lock().unwrap();
 }
 
 #[test]
-fn test_multiple_locks_same_file() {
-    let mut lock1 = FileLock::new("test_multiple.lock");
-    let mut lock2 = FileLock::new("test_multiple.lock");
+fn test_multiple_instances_same_file() {
+    let filename = "test_instances.lock";
+    let mut lock1 = FileLock::new(filename);
+    let mut lock2 = FileLock::new(filename);
 
+    // First instance acquires lock
     let guard1 = lock1.lock().unwrap();
-    drop(guard1);
+    drop(guard1); // Release the lock
 
+    // Second instance can now acquire the lock
     let _guard2 = lock2.lock().unwrap();
 }
 
 #[test]
-fn test_lock_file_creation() {
+fn test_lock_file_creation_and_cleanup() {
     let filename = "test_creation.lock";
-    let mut lock = FileLock::new(filename);
-
-    let guard = lock.lock().unwrap();
-    assert!(std::path::Path::new(filename).exists());
-    drop(guard);
-}
-
-#[test]
-fn test_manual_unlock() {
-    let mut lock = FileLock::new("test_manual.lock");
-    let guard = lock.lock().unwrap();
-
-    guard.unlock().unwrap();
-
-    let _guard2 = lock.lock().unwrap();
-}
-
-#[test]
-fn test_lock_file_cleanup() {
-    let filename = "test_cleanup.lock";
 
     // Ensure the file doesn't exist initially
     let _ = std::fs::remove_file(filename);
@@ -65,8 +55,8 @@ fn test_lock_file_cleanup() {
 
         // Verify the lock file exists while locked
         assert!(std::path::Path::new(filename).exists(), "Lock file should exist while locked");
-    } // lock goes out of scope here, should be dropped and file deleted
+    } // Guard is dropped, lock is released
 
-    // Verify the lock file is deleted after FileLock is dropped
-    assert!(!std::path::Path::new(filename).exists(), "Lock file should be deleted after FileLock is dropped");
+    // Verify the lock file is deleted after guard is dropped
+    assert!(!std::path::Path::new(filename).exists(), "Lock file should be deleted after guard is dropped");
 }
