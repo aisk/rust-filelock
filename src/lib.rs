@@ -43,6 +43,8 @@ pub mod windows;
 #[cfg(windows)]
 pub use windows::FileLock;
 
+use std::path::Path;
+
 /// Creates a new FileLock instance.
 ///
 /// This is a convenience function equivalent to `FileLock::new(filename)`.
@@ -55,8 +57,8 @@ pub use windows::FileLock;
 /// let mut lock = filelock::new("myfile.lock");
 /// let _guard = lock.lock().unwrap();
 /// ```
-pub fn new(filename: &str) -> FileLock {
-    return FileLock::new(filename);
+pub fn new<P: AsRef<Path>>(filename: P) -> FileLock {
+    FileLock::new(filename)
 }
 
 #[cfg(test)]

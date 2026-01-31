@@ -3,28 +3,26 @@ extern crate libc;
 
 use crate::FileLockGuard;
 use std::ffi::CString;
+use std::os::unix::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
 
 pub struct FileLock {
-    filename: String,
+    filename: PathBuf,
     fd: libc::c_int,
 }
 
 impl FileLock {
-    pub fn new(filename: &str) -> FileLock {
-        return FileLock {
-            filename: filename.to_string(),
+    pub fn new<P: AsRef<Path>>(filename: P) -> FileLock {
+        FileLock {
+            filename: filename.as_ref().to_path_buf(),
             fd: 0,
-        };
+        }
     }
 
     pub fn lock(&mut self) -> Result<FileLockGuard<'_>, errno::Errno> {
         unsafe {
-            #[allow(dangling_pointers_from_temporaries)]
-            let fd = libc::open(
-                CString::new(self.filename.as_str()).unwrap().as_ptr(),
-                libc::O_RDWR | libc::O_CREAT,
-                0o644,
-            );
+            let c_filename = CString::new(self.filename.as_os_str().as_bytes()).unwrap();
+            let fd = libc::open(c_filename.as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o644);
             if fd < 0 {
                 return Err(errno::errno());
             }
@@ -33,7 +31,7 @@ impl FileLock {
             if libc::flock(fd, libc::LOCK_EX) != 0 {
                 return Err(errno::errno());
             }
-            return Ok(FileLockGuard::new(self));
+            Ok(FileLockGuard::new(self))
         }
     }
 
@@ -52,7 +50,7 @@ impl FileLock {
 
         self.fd = 0;
 
-        return Ok(());
+        Ok(())
     }
 }
 

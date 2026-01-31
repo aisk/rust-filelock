@@ -70,7 +70,11 @@ fn test_exclusive_access_across_threads() {
                 thread::sleep(Duration::from_millis(20));
 
                 // Verify exclusivity: counter should be exactly 1
-                assert_eq!(*count, 1, "Only one thread should be in critical section (thread {})", i);
+                assert_eq!(
+                    *count, 1,
+                    "Only one thread should be in critical section (thread {})",
+                    i
+                );
 
                 *count -= 1;
             }
@@ -110,7 +114,11 @@ fn test_lock_timeout_behavior() {
         let elapsed = start_time.elapsed();
 
         // Should have waited at least as long as the holder held the lock
-        assert!(elapsed >= wait_duration, "Waiter should have blocked for at least {:?}", wait_duration);
+        assert!(
+            elapsed >= wait_duration,
+            "Waiter should have blocked for at least {:?}",
+            wait_duration
+        );
     });
 
     holder_handle.join().unwrap();

@@ -21,7 +21,10 @@ fn test_file_permission_denied() {
 
     let mut lock = FileLock::new(filename);
     let result = lock.lock();
-    assert!(result.is_err(), "Locking on file with no permissions should fail");
+    assert!(
+        result.is_err(),
+        "Locking on file with no permissions should fail"
+    );
 
     // Cleanup: restore permissions and remove file
     std::fs::set_permissions(filename, std::fs::Permissions::from_mode(0o644)).unwrap();
