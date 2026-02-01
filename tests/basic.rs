@@ -54,9 +54,15 @@ fn test_lock_file_creation_and_cleanup() {
         let _guard = lock.lock().unwrap();
 
         // Verify the lock file exists while locked
-        assert!(std::path::Path::new(filename).exists(), "Lock file should exist while locked");
+        assert!(
+            std::path::Path::new(filename).exists(),
+            "Lock file should exist while locked"
+        );
     } // Guard is dropped, lock is released
 
     // Verify the lock file is deleted after guard is dropped
-    assert!(!std::path::Path::new(filename).exists(), "Lock file should be deleted after guard is dropped");
+    assert!(
+        !std::path::Path::new(filename).exists(),
+        "Lock file should be deleted after guard is dropped"
+    );
 }

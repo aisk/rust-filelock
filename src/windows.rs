@@ -1,41 +1,50 @@
 extern crate winapi;
 
 use crate::FileLockGuard;
-use std::ffi::CString;
+use std::os::windows::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
 
 pub struct FileLock {
     handle: winapi::um::winnt::HANDLE,
     create_error: Option<errno::Errno>,
-    filename: String,
+    filename: PathBuf,
 }
 
 impl FileLock {
-    pub fn new(filename: &str) -> FileLock {
-        #[allow(dangling_pointers_from_temporaries)]
+    pub fn new<P: AsRef<Path>>(filename: P) -> FileLock {
+        let path = filename.as_ref();
+
+        // Convert path to null-terminated UTF-16 wide string
+        let wide_path: Vec<u16> = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+
         let handle = unsafe {
-            winapi::um::fileapi::CreateFileA(
-                CString::new(filename).unwrap().as_ptr(),
+            winapi::um::fileapi::CreateFileW(
+                wide_path.as_ptr(),
                 winapi::um::winnt::GENERIC_READ | winapi::um::winnt::GENERIC_WRITE,
                 winapi::um::winnt::FILE_SHARE_READ | winapi::um::winnt::FILE_SHARE_WRITE,
-                0 as *mut winapi::um::minwinbase::SECURITY_ATTRIBUTES,
+                std::ptr::null_mut(),
                 winapi::um::fileapi::OPEN_ALWAYS,
                 winapi::um::winnt::FILE_ATTRIBUTE_NORMAL,
-                winapi::shared::ntdef::NULL,
+                std::ptr::null_mut(),
             )
         };
 
-        // Save error if CreateFileA failed, to avoid errno race conditions
+        // Save error if CreateFileW failed, to avoid errno race conditions
         let create_error = if handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
             Some(errno::errno())
         } else {
             None
         };
 
-        return FileLock {
-            handle: handle,
-            create_error: create_error,
-            filename: filename.to_string(),
-        };
+        FileLock {
+            handle,
+            create_error,
+            filename: path.to_path_buf(),
+        }
     }
 
     pub fn lock(&mut self) -> Result<FileLockGuard<'_>, errno::Errno> {
@@ -87,7 +96,9 @@ impl FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        if self.handle != winapi::shared::ntdef::NULL && self.handle != winapi::um::handleapi::INVALID_HANDLE_VALUE {
+        if self.handle != winapi::shared::ntdef::NULL
+            && self.handle != winapi::um::handleapi::INVALID_HANDLE_VALUE
+        {
             unsafe {
                 winapi::um::handleapi::CloseHandle(self.handle);
             }
