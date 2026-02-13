@@ -56,6 +56,13 @@ impl FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
+        if self.fd > 0 {
+            unsafe {
+                libc::close(self.fd);
+            }
+            self.fd = 0;
+        }
+
         // Try to delete the lock file, allow failure
         let _ = std::fs::remove_file(&self.filename);
     }
