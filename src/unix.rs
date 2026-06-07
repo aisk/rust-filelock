@@ -15,7 +15,7 @@ impl FileLock {
     pub fn new<P: AsRef<Path>>(filename: P) -> FileLock {
         FileLock {
             filename: filename.as_ref().to_path_buf(),
-            fd: 0,
+            fd: -1,
         }
     }
 
@@ -37,18 +37,26 @@ impl FileLock {
 
     pub(crate) fn unlock(&mut self) -> Result<(), errno::Errno> {
         let fd = self.fd;
+        if fd < 0 {
+            return Ok(());
+        }
+        // Reset the descriptor first so that, whatever happens below, this lock
+        // is never closed twice (e.g. by a later Drop).
+        self.fd = -1;
 
         unsafe {
-            if libc::flock(fd, libc::LOCK_UN) != 0 {
-                return Err(errno::errno());
-            }
+            // close() releases any flock held on the descriptor, so we always
+            // close it and only then report the first error encountered.
+            let unlock_failed = libc::flock(fd, libc::LOCK_UN) != 0;
+            let unlock_errno = errno::errno();
 
             if libc::close(fd) != 0 {
                 return Err(errno::errno());
             }
+            if unlock_failed {
+                return Err(unlock_errno);
+            }
         }
-
-        self.fd = 0;
 
         Ok(())
     }
@@ -56,14 +64,16 @@ impl FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        if self.fd > 0 {
+        if self.fd >= 0 {
             unsafe {
                 libc::close(self.fd);
             }
-            self.fd = 0;
+            self.fd = -1;
         }
 
-        // Try to delete the lock file, allow failure
-        let _ = std::fs::remove_file(&self.filename);
+        // The lock file is intentionally left on disk. flock locks are bound to
+        // the file's inode, so deleting the file would let a concurrent process
+        // create a fresh inode and lock it independently, breaking mutual
+        // exclusion.
     }
 }

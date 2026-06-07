@@ -43,7 +43,7 @@ fn test_multiple_instances_same_file() {
 }
 
 #[test]
-fn test_lock_file_creation_and_cleanup() {
+fn test_lock_file_persists_after_release() {
     let filename = "test_creation.lock";
 
     // Ensure the file doesn't exist initially
@@ -60,9 +60,13 @@ fn test_lock_file_creation_and_cleanup() {
         );
     } // Guard is dropped, lock is released
 
-    // Verify the lock file is deleted after guard is dropped
+    // The lock file is intentionally kept after release: deleting it would
+    // break cross-process mutual exclusion (a concurrent process would create
+    // a fresh inode and lock it independently).
     assert!(
-        !std::path::Path::new(filename).exists(),
-        "Lock file should be deleted after guard is dropped"
+        std::path::Path::new(filename).exists(),
+        "Lock file should be kept after release"
     );
+
+    let _ = std::fs::remove_file(filename);
 }

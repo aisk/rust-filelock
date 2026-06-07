@@ -2,12 +2,11 @@ extern crate winapi;
 
 use crate::FileLockGuard;
 use std::os::windows::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub struct FileLock {
     handle: winapi::um::winnt::HANDLE,
     create_error: Option<errno::Errno>,
-    filename: PathBuf,
 }
 
 impl FileLock {
@@ -43,7 +42,6 @@ impl FileLock {
         FileLock {
             handle,
             create_error,
-            filename: path.to_path_buf(),
         }
     }
 
@@ -104,7 +102,7 @@ impl Drop for FileLock {
             }
         }
 
-        // Try to delete the lock file, allow failure
-        let _ = std::fs::remove_file(&self.filename);
+        // The lock file is intentionally left on disk; deleting it on release
+        // would open a window for concurrent processes to bypass the lock.
     }
 }
