@@ -1,10 +1,14 @@
-use filelock::FileLock;
+use filelock::{ErrorOperation, FileLock};
 
 #[test]
 fn test_invalid_path_locking() {
     let mut lock = FileLock::new("/invalid/path/that/does/not/exist/test.lock");
     let result = lock.lock();
     assert!(result.is_err(), "Locking on invalid path should fail");
+    let error = result.err().unwrap();
+    assert_eq!(error.operation(), ErrorOperation::Open);
+    assert!(std::error::Error::source(&error).is_some());
+    assert!(error.to_string().starts_with("failed to open lock file:"));
 }
 
 #[cfg(unix)]
@@ -16,7 +20,13 @@ fn test_path_with_interior_nul_returns_error() {
     let mut lock = FileLock::new(OsStr::from_bytes(b"invalid\0path.lock"));
     let result = lock.lock();
 
-    assert_eq!(result.err(), Some(errno::Errno(libc::EINVAL)));
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!("path containing NUL unexpectedly succeeded"),
+    };
+    assert_eq!(error.operation(), ErrorOperation::Open);
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert_eq!(error.raw_os_error(), None);
 }
 
 #[cfg(unix)]

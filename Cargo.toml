@@ -10,9 +10,6 @@ readme = "README.md"
 keywords = ["file", "lock", "flock", "locking", "mutex"]
 categories = ["filesystem", "concurrency"]
 
-[dependencies]
-errno = "^0.3"
-
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "^0.3", features = ["handleapi", "fileapi", "winerror"] }
 

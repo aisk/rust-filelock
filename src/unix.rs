@@ -1,8 +1,8 @@
-extern crate errno;
 extern crate libc;
 
-use crate::FileLockGuard;
+use crate::{Error, ErrorOperation, FileLockGuard, Result};
 use std::ffi::CString;
+use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
@@ -19,19 +19,23 @@ impl FileLock {
         }
     }
 
-    pub fn lock(&mut self) -> Result<FileLockGuard<'_>, errno::Errno> {
+    pub fn lock(&mut self) -> Result<FileLockGuard<'_>> {
         unsafe {
-            let c_filename = CString::new(self.filename.as_os_str().as_bytes())
-                .map_err(|_| errno::Errno(libc::EINVAL))?;
+            let c_filename = CString::new(self.filename.as_os_str().as_bytes()).map_err(|_| {
+                Error::new(
+                    ErrorOperation::Open,
+                    io::Error::from(io::ErrorKind::InvalidInput),
+                )
+            })?;
             let fd = libc::open(c_filename.as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o644);
             if fd < 0 {
-                return Err(errno::errno());
+                return Err(Error::new(ErrorOperation::Open, io::Error::last_os_error()));
             }
 
             if libc::flock(fd, libc::LOCK_EX) != 0 {
-                let lock_error = errno::errno();
+                let lock_error = io::Error::last_os_error();
                 libc::close(fd);
-                return Err(lock_error);
+                return Err(Error::new(ErrorOperation::Lock, lock_error));
             }
             self.fd = fd;
             Ok(FileLockGuard::new(self))
@@ -42,22 +46,27 @@ impl FileLock {
     ///
     /// Returns `Ok(None)` when another process or thread currently holds the
     /// lock, and `Ok(Some(_))` when the lock was acquired.
-    pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>, errno::Errno> {
+    pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>> {
         unsafe {
-            let c_filename = CString::new(self.filename.as_os_str().as_bytes())
-                .map_err(|_| errno::Errno(libc::EINVAL))?;
+            let c_filename = CString::new(self.filename.as_os_str().as_bytes()).map_err(|_| {
+                Error::new(
+                    ErrorOperation::Open,
+                    io::Error::from(io::ErrorKind::InvalidInput),
+                )
+            })?;
             let fd = libc::open(c_filename.as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o644);
             if fd < 0 {
-                return Err(errno::errno());
+                return Err(Error::new(ErrorOperation::Open, io::Error::last_os_error()));
             }
 
             if libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) != 0 {
-                let lock_error = errno::errno();
+                let lock_error = io::Error::last_os_error();
                 libc::close(fd);
-                if lock_error.0 == libc::EWOULDBLOCK || lock_error.0 == libc::EAGAIN {
+                if matches!(lock_error.raw_os_error(), Some(code) if code == libc::EWOULDBLOCK || code == libc::EAGAIN)
+                {
                     return Ok(None);
                 }
-                return Err(lock_error);
+                return Err(Error::new(ErrorOperation::Lock, lock_error));
             }
 
             self.fd = fd;
@@ -65,7 +74,7 @@ impl FileLock {
         }
     }
 
-    pub(crate) fn unlock(&mut self) -> Result<(), errno::Errno> {
+    pub(crate) fn unlock(&mut self) -> Result<()> {
         let fd = self.fd;
         if fd < 0 {
             return Ok(());
@@ -78,13 +87,16 @@ impl FileLock {
             // close() releases any flock held on the descriptor, so we always
             // close it and only then report the first error encountered.
             let unlock_failed = libc::flock(fd, libc::LOCK_UN) != 0;
-            let unlock_errno = errno::errno();
+            let unlock_error = io::Error::last_os_error();
 
             if libc::close(fd) != 0 {
-                return Err(errno::errno());
+                return Err(Error::new(
+                    ErrorOperation::Close,
+                    io::Error::last_os_error(),
+                ));
             }
             if unlock_failed {
-                return Err(unlock_errno);
+                return Err(Error::new(ErrorOperation::Unlock, unlock_error));
             }
         }
 
