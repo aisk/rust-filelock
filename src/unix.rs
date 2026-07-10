@@ -26,11 +26,13 @@ impl FileLock {
             if fd < 0 {
                 return Err(errno::errno());
             }
-            self.fd = fd;
 
             if libc::flock(fd, libc::LOCK_EX) != 0 {
-                return Err(errno::errno());
+                let lock_error = errno::errno();
+                libc::close(fd);
+                return Err(lock_error);
             }
+            self.fd = fd;
             Ok(FileLockGuard::new(self))
         }
     }
