@@ -38,6 +38,33 @@ impl FileLock {
         }
     }
 
+    /// Attempts to acquire the lock without blocking.
+    ///
+    /// Returns `Ok(None)` when another process or thread currently holds the
+    /// lock, and `Ok(Some(_))` when the lock was acquired.
+    pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>, errno::Errno> {
+        unsafe {
+            let c_filename = CString::new(self.filename.as_os_str().as_bytes())
+                .map_err(|_| errno::Errno(libc::EINVAL))?;
+            let fd = libc::open(c_filename.as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o644);
+            if fd < 0 {
+                return Err(errno::errno());
+            }
+
+            if libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) != 0 {
+                let lock_error = errno::errno();
+                libc::close(fd);
+                if lock_error.0 == libc::EWOULDBLOCK || lock_error.0 == libc::EAGAIN {
+                    return Ok(None);
+                }
+                return Err(lock_error);
+            }
+
+            self.fd = fd;
+            Ok(Some(FileLockGuard::new(self)))
+        }
+    }
+
     pub(crate) fn unlock(&mut self) -> Result<(), errno::Errno> {
         let fd = self.fd;
         if fd < 0 {

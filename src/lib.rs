@@ -13,6 +13,18 @@
 //!     Ok(())
 //! }
 //! ```
+
+//! To attempt locking without waiting:
+//!
+//! ```rust
+//! let mut lock = filelock::new("myfile.lock");
+//! if let Some(_guard) = lock.try_lock()? {
+//!     // The lock was acquired.
+//! } else {
+//!     // The lock is currently held elsewhere.
+//! }
+//! # Ok::<(), errno::Errno>(())
+//! ```
 //!
 //! For manual control:
 //!

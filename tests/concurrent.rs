@@ -124,3 +124,31 @@ fn test_lock_timeout_behavior() {
     holder_handle.join().unwrap();
     waiter_handle.join().unwrap();
 }
+
+#[test]
+fn test_try_lock_returns_immediately_when_held() {
+    let filename = "test_try_contended.lock";
+    let holder_started = Arc::new(Barrier::new(2));
+    let release_holder = Arc::new(Barrier::new(2));
+
+    let holder_started_clone = holder_started.clone();
+    let release_holder_clone = release_holder.clone();
+    let holder = thread::spawn(move || {
+        let mut lock = FileLock::new(filename);
+        let _guard = lock.lock().unwrap();
+        holder_started_clone.wait();
+        release_holder_clone.wait();
+    });
+
+    holder_started.wait();
+    let mut contender = FileLock::new(filename);
+    let start = Instant::now();
+    let result = contender.try_lock().unwrap();
+    assert!(result.is_none());
+    assert!(start.elapsed() < Duration::from_secs(1));
+    drop(result);
+
+    release_holder.wait();
+    holder.join().unwrap();
+    assert!(contender.try_lock().unwrap().is_some());
+}
