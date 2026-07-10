@@ -48,6 +48,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+Errors are reported as `filelock::Error`. The error identifies which operation failed and exposes both a portable `std::io::ErrorKind` and, when available, the platform-specific error code:
+
+```rust
+use filelock::{ErrorOperation, FileLock};
+
+let mut lock = FileLock::new("missing/directory/myfile.lock");
+if let Err(error) = lock.lock() {
+    assert_eq!(error.operation(), ErrorOperation::Open);
+    eprintln!("{} ({:?})", error, error.kind());
+}
+```
+
 ## Documentation
 
 See https://docs.rs/filelock/latest/filelock/.

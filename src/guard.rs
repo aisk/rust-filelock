@@ -1,4 +1,4 @@
-use crate::FileLock;
+use crate::{FileLock, Result};
 
 /// A guard that holds a file lock and automatically releases it when dropped.
 ///
@@ -36,7 +36,7 @@ impl<'a> FileLockGuard<'a> {
     /// // Manually unlock with error handling
     /// guard.unlock().unwrap();
     /// ```
-    pub fn unlock(mut self) -> Result<(), errno::Errno> {
+    pub fn unlock(mut self) -> Result<()> {
         if !self.unlocked {
             self.lock.unlock()?;
             self.unlocked = true;

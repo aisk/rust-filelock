@@ -1,12 +1,13 @@
 extern crate winapi;
 
-use crate::FileLockGuard;
+use crate::{Error, ErrorOperation, FileLockGuard, Result};
+use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 
 pub struct FileLock {
     handle: winapi::um::winnt::HANDLE,
-    create_error: Option<errno::Errno>,
+    create_error: Option<i32>,
 }
 
 impl FileLock {
@@ -32,9 +33,14 @@ impl FileLock {
             )
         };
 
-        // Save error if CreateFileW failed, to avoid errno race conditions
+        // Save GetLastError immediately if CreateFileW failed, before another
+        // Win32 call can overwrite the thread-local value.
         let create_error = if handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
-            Some(errno::errno())
+            Some(
+                io::Error::last_os_error()
+                    .raw_os_error()
+                    .unwrap_or(winapi::shared::winerror::ERROR_GEN_FAILURE as i32),
+            )
         } else {
             None
         };
@@ -45,10 +51,14 @@ impl FileLock {
         }
     }
 
-    pub fn lock(&mut self) -> Result<FileLockGuard<'_>, errno::Errno> {
+    pub fn lock(&mut self) -> Result<FileLockGuard<'_>> {
         // Check if file handle is valid from new()
         if self.handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
-            return Err(self.create_error.unwrap_or(errno::errno()));
+            let error = self
+                .create_error
+                .map(io::Error::from_raw_os_error)
+                .unwrap_or_else(io::Error::last_os_error);
+            return Err(Error::new(ErrorOperation::Open, error));
         }
 
         #[allow(dangling_pointers_from_temporaries)]
@@ -64,19 +74,23 @@ impl FileLock {
             );
 
             if locked != winapi::shared::minwindef::TRUE {
-                return Err(errno::errno());
+                return Err(Error::new(ErrorOperation::Lock, io::Error::last_os_error()));
             }
         }
-        return Ok(FileLockGuard::new(self));
+        Ok(FileLockGuard::new(self))
     }
 
     /// Attempts to acquire the lock without blocking.
     ///
     /// Returns `Ok(None)` when another process or thread currently holds the
     /// lock, and `Ok(Some(_))` when the lock was acquired.
-    pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>, errno::Errno> {
+    pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>> {
         if self.handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
-            return Err(self.create_error.unwrap_or(errno::errno()));
+            let error = self
+                .create_error
+                .map(io::Error::from_raw_os_error)
+                .unwrap_or_else(io::Error::last_os_error);
+            return Err(Error::new(ErrorOperation::Open, error));
         }
 
         unsafe {
@@ -92,18 +106,20 @@ impl FileLock {
             );
 
             if locked != winapi::shared::minwindef::TRUE {
-                let lock_error = errno::errno();
-                if lock_error.0 == winapi::shared::winerror::ERROR_LOCK_VIOLATION as i32 {
+                let lock_error = io::Error::last_os_error();
+                if lock_error.raw_os_error()
+                    == Some(winapi::shared::winerror::ERROR_LOCK_VIOLATION as i32)
+                {
                     return Ok(None);
                 }
-                return Err(lock_error);
+                return Err(Error::new(ErrorOperation::Lock, lock_error));
             }
         }
 
         Ok(Some(FileLockGuard::new(self)))
     }
 
-    pub(crate) fn unlock(&mut self) -> Result<(), errno::Errno> {
+    pub(crate) fn unlock(&mut self) -> Result<()> {
         unsafe {
             let mut overlapped: winapi::um::minwinbase::OVERLAPPED = winapi::_core::mem::zeroed();
             let unlocked = winapi::um::fileapi::UnlockFileEx(
@@ -115,13 +131,16 @@ impl FileLock {
             );
 
             if unlocked != winapi::shared::minwindef::TRUE {
-                return Err(errno::errno());
+                return Err(Error::new(
+                    ErrorOperation::Unlock,
+                    io::Error::last_os_error(),
+                ));
             }
 
             // Don't close handle here - it will be closed when FileLock is dropped
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 

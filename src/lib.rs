@@ -23,7 +23,7 @@
 //! } else {
 //!     // The lock is currently held elsewhere.
 //! }
-//! # Ok::<(), errno::Errno>(())
+//! # Ok::<(), filelock::Error>(())
 //! ```
 //!
 //! For manual control:
@@ -44,6 +44,9 @@
 
 mod guard;
 pub use guard::FileLockGuard;
+
+mod error;
+pub use error::{Error, ErrorOperation, Result};
 
 #[cfg(unix)]
 mod unix;
