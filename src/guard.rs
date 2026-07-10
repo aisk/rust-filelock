@@ -11,7 +11,7 @@ pub struct FileLockGuard<'a> {
 }
 
 impl<'a> FileLockGuard<'a> {
-    pub fn new(lock: &'a mut FileLock) -> Self {
+    pub(crate) fn new(lock: &'a mut FileLock) -> Self {
         FileLockGuard {
             lock,
             unlocked: false,
