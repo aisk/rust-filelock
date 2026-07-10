@@ -21,7 +21,8 @@ impl FileLock {
 
     pub fn lock(&mut self) -> Result<FileLockGuard<'_>, errno::Errno> {
         unsafe {
-            let c_filename = CString::new(self.filename.as_os_str().as_bytes()).unwrap();
+            let c_filename = CString::new(self.filename.as_os_str().as_bytes())
+                .map_err(|_| errno::Errno(libc::EINVAL))?;
             let fd = libc::open(c_filename.as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o644);
             if fd < 0 {
                 return Err(errno::errno());

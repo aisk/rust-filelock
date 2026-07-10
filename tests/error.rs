@@ -9,6 +9,18 @@ fn test_invalid_path_locking() {
 
 #[cfg(unix)]
 #[test]
+fn test_path_with_interior_nul_returns_error() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let mut lock = FileLock::new(OsStr::from_bytes(b"invalid\0path.lock"));
+    let result = lock.lock();
+
+    assert_eq!(result.err(), Some(errno::Errno(libc::EINVAL)));
+}
+
+#[cfg(unix)]
+#[test]
 fn test_file_permission_denied() {
     use std::fs::File;
     use std::os::unix::fs::PermissionsExt;
