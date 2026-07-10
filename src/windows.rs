@@ -70,6 +70,39 @@ impl FileLock {
         return Ok(FileLockGuard::new(self));
     }
 
+    /// Attempts to acquire the lock without blocking.
+    ///
+    /// Returns `Ok(None)` when another process or thread currently holds the
+    /// lock, and `Ok(Some(_))` when the lock was acquired.
+    pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>, errno::Errno> {
+        if self.handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
+            return Err(self.create_error.unwrap_or(errno::errno()));
+        }
+
+        unsafe {
+            let mut overlapped: winapi::um::minwinbase::OVERLAPPED = winapi::_core::mem::zeroed();
+            let locked = winapi::um::fileapi::LockFileEx(
+                self.handle,
+                winapi::um::minwinbase::LOCKFILE_EXCLUSIVE_LOCK
+                    | winapi::um::minwinbase::LOCKFILE_FAIL_IMMEDIATELY,
+                0,
+                !0,
+                !0,
+                &mut overlapped,
+            );
+
+            if locked != winapi::shared::minwindef::TRUE {
+                let lock_error = errno::errno();
+                if lock_error.0 == winapi::shared::winerror::ERROR_LOCK_VIOLATION as i32 {
+                    return Ok(None);
+                }
+                return Err(lock_error);
+            }
+        }
+
+        Ok(Some(FileLockGuard::new(self)))
+    }
+
     pub(crate) fn unlock(&mut self) -> Result<(), errno::Errno> {
         unsafe {
             let mut overlapped: winapi::um::minwinbase::OVERLAPPED = winapi::_core::mem::zeroed();

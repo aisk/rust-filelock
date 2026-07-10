@@ -29,6 +29,15 @@ fn test_raii_automatic_unlock() {
 }
 
 #[test]
+fn test_try_lock_when_available() {
+    let filename = "test_try_available.lock";
+    let mut lock = FileLock::new(filename);
+
+    let guard = lock.try_lock().unwrap();
+    assert!(guard.is_some());
+}
+
+#[test]
 fn test_multiple_instances_same_file() {
     let filename = "test_instances.lock";
     let mut lock1 = FileLock::new(filename);
