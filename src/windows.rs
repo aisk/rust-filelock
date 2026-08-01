@@ -44,7 +44,7 @@ impl FileLock {
         if handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
             return Err(Error::new(ErrorOperation::Open, io::Error::last_os_error()));
         }
-        self.handle = Some(unsafe { OwnedHandle::from_raw_handle(handle) });
+        self.handle = Some(unsafe { OwnedHandle::from_raw_handle(handle.cast()) });
 
         Ok(())
     }
@@ -54,7 +54,7 @@ impl FileLock {
             return Ok(());
         };
 
-        let closed = unsafe { winapi::um::handleapi::CloseHandle(handle.into_raw_handle()) };
+        let closed = unsafe { winapi::um::handleapi::CloseHandle(handle.into_raw_handle().cast()) };
         if closed != winapi::shared::minwindef::TRUE {
             return Err(io::Error::last_os_error());
         }
@@ -64,7 +64,8 @@ impl FileLock {
 
     pub fn lock(&mut self) -> Result<FileLockGuard<'_>> {
         self.open()?;
-        let handle = self.handle.as_ref().unwrap().as_raw_handle();
+        let handle: winapi::um::winnt::HANDLE =
+            self.handle.as_ref().unwrap().as_raw_handle().cast();
 
         #[allow(dangling_pointers_from_temporaries)]
         unsafe {
@@ -93,7 +94,8 @@ impl FileLock {
     /// lock, and `Ok(Some(_))` when the lock was acquired.
     pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>> {
         self.open()?;
-        let handle = self.handle.as_ref().unwrap().as_raw_handle();
+        let handle: winapi::um::winnt::HANDLE =
+            self.handle.as_ref().unwrap().as_raw_handle().cast();
 
         unsafe {
             let mut overlapped: winapi::um::minwinbase::OVERLAPPED = winapi::_core::mem::zeroed();
@@ -123,7 +125,12 @@ impl FileLock {
     }
 
     pub(crate) fn unlock(&mut self) -> Result<()> {
-        let Some(handle) = self.handle.as_ref().map(AsRawHandle::as_raw_handle) else {
+        let Some(handle) = self
+            .handle
+            .as_ref()
+            .map(AsRawHandle::as_raw_handle)
+            .map(|handle| handle.cast())
+        else {
             return Ok(());
         };
 
