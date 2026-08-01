@@ -29,6 +29,33 @@ fn test_path_with_interior_nul_returns_error() {
     assert_eq!(error.raw_os_error(), None);
 }
 
+#[cfg(windows)]
+#[test]
+fn test_path_with_interior_nul_returns_error() {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+
+    let prefix =
+        std::env::temp_dir().join(format!("filelock-nul-prefix-{}.lock", std::process::id()));
+    let _ = std::fs::remove_file(&prefix);
+
+    let mut path: Vec<u16> = prefix.as_os_str().encode_wide().collect();
+    path.push(0);
+    path.extend("ignored".encode_utf16());
+
+    let mut lock = FileLock::new(std::ffi::OsString::from_wide(&path));
+    let error = match lock.lock() {
+        Err(error) => error,
+        Ok(_) => panic!("path containing NUL unexpectedly succeeded"),
+    };
+
+    assert_eq!(error.operation(), ErrorOperation::Open);
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(
+        !prefix.exists(),
+        "the truncated path prefix was unexpectedly created"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn test_file_permission_denied() {

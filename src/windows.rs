@@ -7,19 +7,36 @@ use std::path::Path;
 
 pub struct FileLock {
     handle: winapi::um::winnt::HANDLE,
-    create_error: Option<i32>,
+    create_error: Option<CreateError>,
+}
+
+#[derive(Clone, Copy)]
+enum CreateError {
+    InvalidInput,
+    Os(i32),
+}
+
+impl CreateError {
+    fn to_io_error(self) -> io::Error {
+        match self {
+            Self::InvalidInput => io::Error::from(io::ErrorKind::InvalidInput),
+            Self::Os(code) => io::Error::from_raw_os_error(code),
+        }
+    }
 }
 
 impl FileLock {
     pub fn new<P: AsRef<Path>>(filename: P) -> FileLock {
         let path = filename.as_ref();
 
-        // Convert path to null-terminated UTF-16 wide string
-        let wide_path: Vec<u16> = path
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
+        let mut wide_path: Vec<u16> = path.as_os_str().encode_wide().collect();
+        if wide_path.contains(&0) {
+            return FileLock {
+                handle: winapi::um::handleapi::INVALID_HANDLE_VALUE,
+                create_error: Some(CreateError::InvalidInput),
+            };
+        }
+        wide_path.push(0);
 
         let handle = unsafe {
             winapi::um::fileapi::CreateFileW(
@@ -36,11 +53,11 @@ impl FileLock {
         // Save GetLastError immediately if CreateFileW failed, before another
         // Win32 call can overwrite the thread-local value.
         let create_error = if handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
-            Some(
+            Some(CreateError::Os(
                 io::Error::last_os_error()
                     .raw_os_error()
                     .unwrap_or(winapi::shared::winerror::ERROR_GEN_FAILURE as i32),
-            )
+            ))
         } else {
             None
         };
@@ -56,7 +73,7 @@ impl FileLock {
         if self.handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
             let error = self
                 .create_error
-                .map(io::Error::from_raw_os_error)
+                .map(CreateError::to_io_error)
                 .unwrap_or_else(io::Error::last_os_error);
             return Err(Error::new(ErrorOperation::Open, error));
         }
@@ -88,7 +105,7 @@ impl FileLock {
         if self.handle == winapi::um::handleapi::INVALID_HANDLE_VALUE {
             let error = self
                 .create_error
-                .map(io::Error::from_raw_os_error)
+                .map(CreateError::to_io_error)
                 .unwrap_or_else(io::Error::last_os_error);
             return Err(Error::new(ErrorOperation::Open, error));
         }
