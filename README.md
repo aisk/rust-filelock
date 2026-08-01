@@ -60,6 +60,14 @@ if let Err(error) = lock.lock() {
 }
 ```
 
+## Platform behavior
+
+- Every participant must use this locking protocol and resolve the same stable lock-file path. Do not delete, rename, or replace the lock file while participants may be running; doing so can let processes lock different underlying files.
+- Unix uses advisory `flock` locks. Uncooperative processes can still access the lock file, and a process must not `fork` while holding a guard and then let both parent and child continue through the protected critical section.
+- Unix lock files are opened read-write and created with mode `0644` before applying the process umask. Cross-user locking therefore requires permissions to be arranged explicitly.
+- Windows uses an exclusive byte-range lock. It prevents ordinary reads and writes to the locked range by other processes, but does not prevent access through memory-mapped views.
+- Network filesystem behavior depends on the operating system, filesystem, mount options, and server. Validate the required semantics before using a lock file on NFS, SMB, or another remote filesystem.
+
 ## Documentation
 
 See https://docs.rs/filelock/latest/filelock/.

@@ -1,5 +1,22 @@
 //! Simple filelock library for rust, using `flock` on Unix-like systems and `LockFileEx` on Windows under the hood.
 //!
+//! ## Platform behavior
+//!
+//! All participants must use this locking protocol and resolve the same stable
+//! lock-file path. The lock file must not be deleted, renamed, or replaced while
+//! participants may be running.
+//!
+//! Unix locks are advisory and associated with the opened file, not its path.
+//! Do not `fork` while holding a guard and then let both parent and child continue
+//! through the protected critical section. Lock files are opened read-write and
+//! created with mode `0644` before applying the process umask, so cross-user use
+//! requires permissions to be arranged explicitly.
+//!
+//! Windows uses an exclusive byte-range lock. It prevents ordinary reads and
+//! writes to that range from other processes, but not access through memory-mapped
+//! views. On network filesystems, locking behavior can additionally depend on the
+//! client, server, filesystem, and mount configuration.
+//!
 //! ## Usage
 //!
 //! ```no_run
