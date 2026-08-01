@@ -1,4 +1,5 @@
 use filelock::FileLock;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -91,7 +92,7 @@ fn test_concurrent_lock_access() {
 #[test]
 fn test_exclusive_access_across_threads() {
     let filename = "test_exclusive.lock";
-    let concurrent_counter = Arc::new(Mutex::new(0));
+    let concurrent_counter = Arc::new(AtomicUsize::new(0));
     let mut handles = vec![];
 
     // Spawn multiple threads that all try to access the same file
@@ -101,23 +102,16 @@ fn test_exclusive_access_across_threads() {
             let mut lock = FileLock::new(filename);
             let _guard = lock.lock().unwrap();
 
-            // Critical section: only one thread should be here at a time
-            {
-                let mut count = counter_clone.lock().unwrap();
-                *count += 1;
+            let previous = counter_clone.fetch_add(1, Ordering::SeqCst);
+            assert_eq!(
+                previous, 0,
+                "Only one thread should be in critical section (thread {})",
+                i
+            );
 
-                // Simulate work
-                thread::sleep(Duration::from_millis(20));
+            thread::sleep(Duration::from_millis(20));
 
-                // Verify exclusivity: counter should be exactly 1
-                assert_eq!(
-                    *count, 1,
-                    "Only one thread should be in critical section (thread {})",
-                    i
-                );
-
-                *count -= 1;
-            }
+            assert_eq!(counter_clone.fetch_sub(1, Ordering::SeqCst), 1);
         });
         handles.push(handle);
     }
@@ -127,7 +121,7 @@ fn test_exclusive_access_across_threads() {
     }
 
     // All threads should have completed successfully
-    assert_eq!(*concurrent_counter.lock().unwrap(), 0);
+    assert_eq!(concurrent_counter.load(Ordering::SeqCst), 0);
 }
 
 #[test]
