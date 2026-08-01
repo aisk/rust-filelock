@@ -104,15 +104,14 @@ impl FileLock {
             // close it and only then report the first error encountered.
             let unlock_failed = libc::flock(fd, libc::LOCK_UN) != 0;
             let unlock_error = io::Error::last_os_error();
+            let close_failed = libc::close(fd) != 0;
+            let close_error = io::Error::last_os_error();
 
-            if libc::close(fd) != 0 {
-                return Err(Error::new(
-                    ErrorOperation::Close,
-                    io::Error::last_os_error(),
-                ));
-            }
             if unlock_failed {
                 return Err(Error::new(ErrorOperation::Unlock, unlock_error));
+            }
+            if close_failed {
+                return Err(Error::new(ErrorOperation::Close, close_error));
             }
         }
 
