@@ -3,6 +3,46 @@ use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+#[test]
+fn test_lock_is_not_inherited_across_exec() {
+    const CHILD_MODE: &str = "FILELOCK_CLOEXEC_TEST_CHILD";
+    const LOCK_PATH: &str = "FILELOCK_CLOEXEC_TEST_PATH";
+
+    if std::env::var_os(CHILD_MODE).is_some() {
+        let path = std::env::var_os(LOCK_PATH).unwrap();
+        let mut lock = FileLock::new(path);
+        let _guard = lock.lock().unwrap();
+
+        std::process::Command::new("sleep")
+            .arg("1")
+            .spawn()
+            .unwrap();
+        std::process::exit(0);
+    }
+
+    let path = std::env::temp_dir().join(format!("filelock-cloexec-{}.lock", std::process::id()));
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "test_lock_is_not_inherited_across_exec",
+            "--nocapture",
+        ])
+        .env(CHILD_MODE, "1")
+        .env(LOCK_PATH, &path)
+        .status()
+        .unwrap();
+    assert!(status.success());
+
+    let mut contender = FileLock::new(&path);
+    let acquired = contender.try_lock().unwrap().is_some();
+    let _ = std::fs::remove_file(path);
+    assert!(
+        acquired,
+        "an exec child inherited and retained the file lock"
+    );
+}
+
 #[test]
 fn test_concurrent_lock_access() {
     let filename = "test_concurrent.lock";

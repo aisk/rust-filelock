@@ -27,7 +27,11 @@ impl FileLock {
                     io::Error::from(io::ErrorKind::InvalidInput),
                 )
             })?;
-            let fd = libc::open(c_filename.as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o644);
+            let fd = libc::open(
+                c_filename.as_ptr(),
+                libc::O_RDWR | libc::O_CREAT | libc::O_CLOEXEC,
+                0o644,
+            );
             if fd < 0 {
                 return Err(Error::new(ErrorOperation::Open, io::Error::last_os_error()));
             }
@@ -54,7 +58,11 @@ impl FileLock {
                     io::Error::from(io::ErrorKind::InvalidInput),
                 )
             })?;
-            let fd = libc::open(c_filename.as_ptr(), libc::O_RDWR | libc::O_CREAT, 0o644);
+            let fd = libc::open(
+                c_filename.as_ptr(),
+                libc::O_RDWR | libc::O_CREAT | libc::O_CLOEXEC,
+                0o644,
+            );
             if fd < 0 {
                 return Err(Error::new(ErrorOperation::Open, io::Error::last_os_error()));
             }
