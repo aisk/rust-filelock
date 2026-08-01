@@ -1,6 +1,6 @@
 # filelock
 
-[![Rust](https://github.com/aisk/filelock/actions/workflows/ci.yml/badge.svg)](https://github.com/aisk/filelock/actions/workflows/ci.yml)
+[![Rust](https://github.com/aisk/rust-filelock/actions/workflows/ci.yml/badge.svg)](https://github.com/aisk/rust-filelock/actions/workflows/ci.yml)
 
 Simple filelock library for rust, using `flock` on Unix-like systems and `LockFileEx` on Windows under the hood.
 
@@ -74,4 +74,4 @@ See https://docs.rs/filelock/latest/filelock/.
 
 ## License
 
-Filelock is distributed by a [MIT license](https://github.com/aisk/filelock/tree/master/LICENSE).
+Filelock is distributed by a [MIT license](https://github.com/aisk/rust-filelock/tree/master/LICENSE).
