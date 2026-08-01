@@ -1,6 +1,25 @@
 use filelock::{ErrorOperation, FileLock};
 
 #[test]
+fn test_open_error_recovery() {
+    let directory = std::env::temp_dir().join(format!("filelock-recovery-{}", std::process::id()));
+    let filename = directory.join("test.lock");
+
+    let mut lock = FileLock::new(&filename);
+    let error = match lock.lock() {
+        Err(error) => error,
+        Ok(_) => panic!("locking in a missing directory unexpectedly succeeded"),
+    };
+    assert_eq!(error.operation(), ErrorOperation::Open);
+
+    std::fs::create_dir(&directory).unwrap();
+    lock.lock().unwrap().unlock().unwrap();
+
+    std::fs::remove_file(filename).unwrap();
+    std::fs::remove_dir(directory).unwrap();
+}
+
+#[test]
 fn test_invalid_path_locking() {
     let mut lock = FileLock::new("/invalid/path/that/does/not/exist/test.lock");
     let result = lock.lock();

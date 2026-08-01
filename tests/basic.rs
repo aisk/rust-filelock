@@ -1,6 +1,17 @@
 use filelock::FileLock;
 
 #[test]
+fn test_new_does_not_create_lock_file() {
+    let filename = std::env::temp_dir().join(format!("filelock-new-{}.lock", std::process::id()));
+    let _ = std::fs::remove_file(&filename);
+
+    let lock = FileLock::new(&filename);
+    assert!(!filename.exists());
+
+    drop(lock);
+}
+
+#[test]
 fn test_basic_lock_and_unlock() {
     let filename = "test_basic.lock";
     let mut lock = FileLock::new(filename);
