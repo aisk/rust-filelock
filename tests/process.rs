@@ -1,3 +1,6 @@
+mod common;
+
+use common::TestDir;
 use filelock::FileLock;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
@@ -15,7 +18,8 @@ fn test_exclusive_lock_across_processes() {
         return;
     }
 
-    let path = std::env::temp_dir().join(format!("filelock-process-{}.lock", std::process::id()));
+    let test_dir = TestDir::new("process");
+    let path = test_dir.path("test.lock");
     let mut holder = Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
@@ -54,8 +58,6 @@ fn test_exclusive_lock_across_processes() {
     output_reader.join().unwrap();
 
     let available_after_release = contender.try_lock().unwrap().is_some();
-    let _ = std::fs::remove_file(path);
-
     assert!(status.success(), "holder process failed: {status}");
     assert!(
         unavailable_while_held,

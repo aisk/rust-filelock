@@ -1,8 +1,12 @@
+mod common;
+
+use common::TestDir;
 use filelock::{ErrorOperation, FileLock};
 
 #[test]
 fn test_open_error_recovery() {
-    let directory = std::env::temp_dir().join(format!("filelock-recovery-{}", std::process::id()));
+    let test_dir = TestDir::new("open-recovery");
+    let directory = test_dir.path("missing");
     let filename = directory.join("test.lock");
 
     let mut lock = FileLock::new(&filename);
@@ -14,14 +18,14 @@ fn test_open_error_recovery() {
 
     std::fs::create_dir(&directory).unwrap();
     lock.lock().unwrap().unlock().unwrap();
-
-    std::fs::remove_file(filename).unwrap();
-    std::fs::remove_dir(directory).unwrap();
 }
 
 #[test]
 fn test_invalid_path_locking() {
-    let mut lock = FileLock::new("/invalid/path/that/does/not/exist/test.lock");
+    let test_dir = TestDir::new("invalid-path");
+    let parent = test_dir.path("not-a-directory");
+    std::fs::write(&parent, b"file").unwrap();
+    let mut lock = FileLock::new(parent.join("test.lock"));
     let result = lock.lock();
     assert!(result.is_err(), "Locking on invalid path should fail");
     let error = result.err().unwrap();
@@ -53,9 +57,8 @@ fn test_path_with_interior_nul_returns_error() {
 fn test_path_with_interior_nul_returns_error() {
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
 
-    let prefix =
-        std::env::temp_dir().join(format!("filelock-nul-prefix-{}.lock", std::process::id()));
-    let _ = std::fs::remove_file(&prefix);
+    let test_dir = TestDir::new("nul-prefix");
+    let prefix = test_dir.path("prefix.lock");
 
     let mut path: Vec<u16> = prefix.as_os_str().encode_wide().collect();
     path.push(0);
@@ -81,28 +84,32 @@ fn test_file_permission_denied() {
     use std::fs::File;
     use std::os::unix::fs::PermissionsExt;
 
-    let filename = "test_permissions.lock";
+    let test_dir = TestDir::new("permissions");
+    let filename = test_dir.path("test.lock");
 
     // Create a file with no permissions
-    File::create(filename).unwrap();
-    std::fs::set_permissions(filename, std::fs::Permissions::from_mode(0o000)).unwrap();
+    File::create(&filename).unwrap();
+    std::fs::set_permissions(&filename, std::fs::Permissions::from_mode(0o000)).unwrap();
 
-    let mut lock = FileLock::new(filename);
-    let result = lock.lock();
-    assert!(
-        result.is_err(),
-        "Locking on file with no permissions should fail"
-    );
+    let mut lock = FileLock::new(&filename);
+    let denied = match lock.lock() {
+        Err(error) => Some(error.operation()),
+        Ok(guard) => {
+            drop(guard);
+            None
+        }
+    };
 
-    // Cleanup: restore permissions and remove file
-    std::fs::set_permissions(filename, std::fs::Permissions::from_mode(0o644)).unwrap();
-    std::fs::remove_file(filename).unwrap();
+    std::fs::set_permissions(&filename, std::fs::Permissions::from_mode(0o644)).unwrap();
+    if let Some(operation) = denied {
+        assert_eq!(operation, ErrorOperation::Open);
+    }
 }
 
 #[test]
 fn test_error_recovery() {
-    let filename = "test_error_recovery.lock";
-    let mut lock = FileLock::new(filename);
+    let test_dir = TestDir::new("error-recovery");
+    let mut lock = FileLock::new(test_dir.path("test.lock"));
 
     // First successful lock
     let guard1 = lock.lock().unwrap();

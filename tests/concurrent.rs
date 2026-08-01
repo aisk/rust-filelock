@@ -1,3 +1,6 @@
+mod common;
+
+use common::TestDir;
 use filelock::FileLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
@@ -22,7 +25,8 @@ fn test_lock_is_not_inherited_across_exec() {
         std::process::exit(0);
     }
 
-    let path = std::env::temp_dir().join(format!("filelock-cloexec-{}.lock", std::process::id()));
+    let test_dir = TestDir::new("cloexec");
+    let path = test_dir.path("test.lock");
     let status = std::process::Command::new(std::env::current_exe().unwrap())
         .args([
             "--exact",
@@ -37,7 +41,6 @@ fn test_lock_is_not_inherited_across_exec() {
 
     let mut contender = FileLock::new(&path);
     let acquired = contender.try_lock().unwrap().is_some();
-    let _ = std::fs::remove_file(path);
     assert!(
         acquired,
         "an exec child inherited and retained the file lock"
@@ -46,13 +49,15 @@ fn test_lock_is_not_inherited_across_exec() {
 
 #[test]
 fn test_concurrent_lock_access() {
-    let filename = "test_concurrent.lock";
+    let test_dir = TestDir::new("concurrent");
+    let filename = test_dir.path("test.lock");
     let (holder_ready_tx, holder_ready_rx) = mpsc::channel();
     let (release_holder_tx, release_holder_rx) = mpsc::channel();
     let (waiter_acquired_tx, waiter_acquired_rx) = mpsc::channel();
 
+    let holder_filename = filename.clone();
     let holder = thread::spawn(move || {
-        let mut lock = FileLock::new(filename);
+        let mut lock = FileLock::new(holder_filename);
         let guard = lock.lock().unwrap();
         holder_ready_tx.send(()).unwrap();
         release_holder_rx.recv().unwrap();
@@ -89,13 +94,15 @@ fn test_concurrent_lock_access() {
 
 #[test]
 fn test_exclusive_access_across_threads() {
-    let filename = "test_exclusive.lock";
+    let test_dir = TestDir::new("exclusive");
+    let filename = test_dir.path("test.lock");
     let concurrent_counter = Arc::new(AtomicUsize::new(0));
     let mut handles = vec![];
 
     // Spawn multiple threads that all try to access the same file
     for i in 0..4 {
         let counter_clone = concurrent_counter.clone();
+        let filename = filename.clone();
         let handle = thread::spawn(move || {
             let mut lock = FileLock::new(filename);
             let _guard = lock.lock().unwrap();
@@ -124,11 +131,13 @@ fn test_exclusive_access_across_threads() {
 
 #[test]
 fn test_try_lock_returns_immediately_when_held() {
-    let filename = "test_try_contended.lock";
+    let test_dir = TestDir::new("try-contended");
+    let filename = test_dir.path("test.lock");
     let (holder_ready_tx, holder_ready_rx) = mpsc::channel();
     let (release_holder_tx, release_holder_rx) = mpsc::channel();
+    let holder_filename = filename.clone();
     let holder = thread::spawn(move || {
-        let mut lock = FileLock::new(filename);
+        let mut lock = FileLock::new(holder_filename);
         let _guard = lock.lock().unwrap();
         holder_ready_tx.send(()).unwrap();
         release_holder_rx.recv().unwrap();
@@ -139,8 +148,9 @@ fn test_try_lock_returns_immediately_when_held() {
         .unwrap();
 
     let (result_tx, result_rx) = mpsc::channel();
+    let contender_filename = filename.clone();
     let contender = thread::spawn(move || {
-        let mut lock = FileLock::new(filename);
+        let mut lock = FileLock::new(contender_filename);
         let unavailable = lock.try_lock().unwrap().is_none();
         result_tx.send(unavailable).unwrap();
     });

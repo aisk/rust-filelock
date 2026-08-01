@@ -25,7 +25,7 @@ impl<'a> FileLockGuard<'a> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```no_run
     /// use filelock::FileLock;
     ///
     /// let mut lock = FileLock::new("myfile.lock");

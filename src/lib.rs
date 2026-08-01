@@ -2,7 +2,7 @@
 //!
 //! ## Usage
 //!
-//! ```rust
+//! ```no_run
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let mut lock = filelock::new("myfile.lock");
 //!     let _guard = lock.lock()?;
@@ -16,7 +16,7 @@
 
 //! To attempt locking without waiting:
 //!
-//! ```rust
+//! ```no_run
 //! let mut lock = filelock::new("myfile.lock");
 //! if let Some(_guard) = lock.try_lock()? {
 //!     // The lock was acquired.
@@ -28,7 +28,7 @@
 //!
 //! For manual control:
 //!
-//! ```rust
+//! ```no_run
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let mut lock = filelock::new("myfile.lock");
 //!     let guard = lock.lock()?;
@@ -66,7 +66,7 @@ use std::path::Path;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```no_run
 /// use filelock;
 ///
 /// let mut lock = filelock::new("myfile.lock");
@@ -82,8 +82,13 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mut lock = super::new("test.lock");
-        let _guard = lock.lock().unwrap();
+        let filename =
+            std::env::temp_dir().join(format!("filelock-unit-{}.lock", std::process::id()));
+        {
+            let mut lock = super::new(&filename);
+            let _guard = lock.lock().unwrap();
+        }
+        std::fs::remove_file(filename).unwrap();
     }
 
     #[test]
