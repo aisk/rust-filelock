@@ -36,8 +36,16 @@ impl FileLock {
                 return Err(Error::new(ErrorOperation::Open, io::Error::last_os_error()));
             }
 
-            if libc::flock(fd, libc::LOCK_EX) != 0 {
+            loop {
+                if libc::flock(fd, libc::LOCK_EX) == 0 {
+                    break;
+                }
+
                 let lock_error = io::Error::last_os_error();
+                if lock_error.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+
                 libc::close(fd);
                 return Err(Error::new(ErrorOperation::Lock, lock_error));
             }
