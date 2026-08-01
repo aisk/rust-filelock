@@ -78,9 +78,16 @@ pub fn new<P: AsRef<Path>>(filename: P) -> FileLock {
 
 #[cfg(test)]
 mod tests {
+    fn assert_send_sync<T: Send + Sync>() {}
+
     #[test]
     fn it_works() {
         let mut lock = super::new("test.lock");
         let _guard = lock.lock().unwrap();
+    }
+
+    #[test]
+    fn file_lock_is_send_and_sync() {
+        assert_send_sync::<super::FileLock>();
     }
 }
