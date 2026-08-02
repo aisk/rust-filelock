@@ -55,6 +55,34 @@
 //! # Ok::<(), filelock::Error>(())
 //! ```
 //!
+//! To wait for a lock with an upper bound on the wait:
+//!
+//! ```no_run
+//! use std::time::Duration;
+//!
+//! let mut lock = filelock::new("myfile.lock")?;
+//! if let Some(_guard) = lock.lock_timeout(Duration::from_secs(5))? {
+//!     // The lock was acquired within five seconds.
+//! } else {
+//!     // The lock is still held elsewhere.
+//! }
+//! # Ok::<(), filelock::Error>(())
+//! ```
+//!
+//! The guards returned by `lock()` and friends borrow the `FileLock`. When a
+//! guard needs to outlive the current scope — stored in a struct or moved into
+//! a spawned task — use the owned variants, which take ownership of the
+//! `FileLock` and return it on unlock:
+//!
+//! ```no_run
+//! let guard = filelock::new("myfile.lock")?.lock_owned()?;
+//! std::thread::spawn(move || {
+//!     let _guard = guard;
+//!     // Critical section runs on another thread.
+//! });
+//! # Ok::<(), filelock::Error>(())
+//! ```
+//!
 //! With the optional `tokio` feature, a contended lock can be acquired without
 //! blocking a Tokio runtime worker on lock contention:
 //!
@@ -86,7 +114,7 @@
 //! ```
 
 mod guard;
-pub use guard::FileLockGuard;
+pub use guard::{FileLockGuard, OwnedFileLockGuard};
 
 mod error;
 pub use error::{Error, ErrorOperation, Result};

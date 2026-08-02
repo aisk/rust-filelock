@@ -60,3 +60,46 @@ impl Drop for FileLockGuard<'_> {
         }
     }
 }
+
+/// A guard that owns its [`FileLock`] and releases the lock when dropped.
+///
+/// Unlike [`FileLockGuard`], this guard does not borrow the `FileLock`, so it
+/// has no lifetime and can be stored in long-lived structures or moved across
+/// threads and tasks. It is returned by `FileLock::lock_owned` and related
+/// methods.
+#[must_use = "this guard holds a file lock; if not used, the lock will be immediately released"]
+pub struct OwnedFileLockGuard {
+    lock: Option<FileLock>,
+}
+
+impl OwnedFileLockGuard {
+    pub(crate) fn new(lock: FileLock) -> Self {
+        OwnedFileLockGuard { lock: Some(lock) }
+    }
+
+    /// Returns a reference to the underlying lock file.
+    ///
+    /// This can be used to read or write auxiliary data stored in the lock
+    /// file, such as the holder's process id, while the lock is held.
+    pub fn file(&self) -> &std::fs::File {
+        self.lock.as_ref().unwrap().file()
+    }
+
+    /// Manually unlocks the file lock, returning the [`FileLock`] for reuse.
+    ///
+    /// If releasing the lock fails, the `FileLock` is dropped, which closes
+    /// the lock file and thereby releases the lock anyway.
+    pub fn unlock(mut self) -> Result<FileLock> {
+        let mut lock = self.lock.take().unwrap();
+        lock.unlock()?;
+        Ok(lock)
+    }
+}
+
+impl Drop for OwnedFileLockGuard {
+    fn drop(&mut self) {
+        if let Some(lock) = &mut self.lock {
+            let _ = lock.unlock();
+        }
+    }
+}

@@ -111,6 +111,37 @@ async fn aborting_a_lock_holder_releases_the_lock() {
 }
 
 #[tokio::test]
+async fn owned_async_guard_can_move_into_spawned_task() {
+    let test_dir = TestDir::new("tokio-owned");
+    let path = test_dir.path("test.lock");
+
+    let guard = FileLock::new(&path)
+        .unwrap()
+        .lock_owned_async()
+        .await
+        .unwrap();
+
+    let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+    let holder = tokio::spawn(async move {
+        let _guard = guard;
+        release_rx.await.unwrap();
+    });
+
+    let mut contender = FileLock::new(&path).unwrap();
+    assert!(
+        contender.try_lock().unwrap().is_none(),
+        "the lock was not held by the guard moved into the task"
+    );
+
+    release_tx.send(()).unwrap();
+    holder.await.unwrap();
+    assert!(
+        contender.try_lock().unwrap().is_some(),
+        "dropping the moved guard did not release the lock"
+    );
+}
+
+#[tokio::test]
 async fn multiple_async_waiters_remain_exclusive_and_make_progress() {
     let test_dir = TestDir::new("tokio-waiters");
     let path = test_dir.path("test.lock");

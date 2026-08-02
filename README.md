@@ -48,6 +48,33 @@ let _guard = lock.lock_shared()?;
 // try_lock_shared() is also available.
 ```
 
+To wait with an upper bound, use `lock_timeout` / `lock_shared_timeout`:
+
+```rust
+use std::time::Duration;
+
+let mut lock = filelock::new("myfile.lock")?;
+if let Some(_guard) = lock.lock_timeout(Duration::from_secs(5))? {
+    // The lock was acquired within five seconds.
+} else {
+    // The lock is still held elsewhere.
+}
+```
+
+The guards returned by `lock()` and friends borrow the `FileLock`. When a
+guard needs to outlive the current scope — stored in a struct or moved into a
+spawned task — use the owned variants (`lock_owned`, `lock_shared_owned`, and
+with the `tokio` feature `lock_owned_async` / `lock_shared_owned_async`),
+which take ownership of the `FileLock` and return it on unlock:
+
+```rust
+let guard = filelock::new("myfile.lock")?.lock_owned()?;
+std::thread::spawn(move || {
+    let _guard = guard;
+    // Critical section runs on another thread.
+});
+```
+
 For manual control:
 
 ```rust

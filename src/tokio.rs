@@ -1,9 +1,6 @@
-use crate::{FileLock, FileLockGuard, Result};
+use crate::lock::{INITIAL_RETRY_DELAY, MAX_RETRY_DELAY};
+use crate::{FileLock, FileLockGuard, OwnedFileLockGuard, Result};
 use std::fs::File;
-use std::time::Duration;
-
-const INITIAL_RETRY_DELAY: Duration = Duration::from_millis(1);
-const MAX_RETRY_DELAY: Duration = Duration::from_millis(50);
 
 impl FileLock {
     /// Acquires an exclusive lock, waiting asynchronously while it is held
@@ -36,7 +33,8 @@ impl FileLock {
     /// # }
     /// ```
     pub async fn lock_async(&mut self) -> Result<FileLockGuard<'_>> {
-        self.lock_async_inner(File::try_lock).await
+        self.wait_async(File::try_lock).await?;
+        Ok(FileLockGuard::new(self))
     }
 
     /// Acquires a shared lock, waiting asynchronously while an exclusive lock
@@ -45,18 +43,42 @@ impl FileLock {
     /// See [`lock_async`](FileLock::lock_async) for runtime requirements and
     /// cancellation behavior.
     pub async fn lock_shared_async(&mut self) -> Result<FileLockGuard<'_>> {
-        self.lock_async_inner(File::try_lock_shared).await
+        self.wait_async(File::try_lock_shared).await?;
+        Ok(FileLockGuard::new(self))
     }
 
-    async fn lock_async_inner(
-        &mut self,
+    /// Acquires an exclusive lock asynchronously and returns a guard that owns
+    /// this `FileLock`.
+    ///
+    /// The returned guard has no lifetime, so it can be moved into spawned
+    /// tasks or stored in long-lived structures. [`OwnedFileLockGuard::unlock`]
+    /// returns the `FileLock` for reuse.
+    ///
+    /// See [`lock_async`](FileLock::lock_async) for runtime requirements and
+    /// cancellation behavior.
+    pub async fn lock_owned_async(self) -> Result<OwnedFileLockGuard> {
+        self.wait_async(File::try_lock).await?;
+        Ok(OwnedFileLockGuard::new(self))
+    }
+
+    /// Acquires a shared lock asynchronously and returns a guard that owns
+    /// this `FileLock`.
+    ///
+    /// See [`lock_owned_async`](FileLock::lock_owned_async).
+    pub async fn lock_shared_owned_async(self) -> Result<OwnedFileLockGuard> {
+        self.wait_async(File::try_lock_shared).await?;
+        Ok(OwnedFileLockGuard::new(self))
+    }
+
+    async fn wait_async(
+        &self,
         try_lock: fn(&File) -> std::result::Result<(), std::fs::TryLockError>,
-    ) -> Result<FileLockGuard<'_>> {
+    ) -> Result<()> {
         let mut retry_delay = INITIAL_RETRY_DELAY;
 
         loop {
             if self.try_acquire(try_lock)? {
-                return Ok(FileLockGuard::new(self));
+                return Ok(());
             }
 
             ::tokio::time::sleep(retry_delay).await;

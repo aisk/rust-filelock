@@ -1,7 +1,11 @@
-use crate::{Error, ErrorOperation, FileLockGuard, Result};
+use crate::{Error, ErrorOperation, FileLockGuard, OwnedFileLockGuard, Result};
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io;
 use std::path::Path;
+use std::time::{Duration, Instant};
+
+pub(crate) const INITIAL_RETRY_DELAY: Duration = Duration::from_millis(1);
+pub(crate) const MAX_RETRY_DELAY: Duration = Duration::from_millis(50);
 
 /// A handle to a lock file.
 ///
@@ -73,13 +77,8 @@ impl FileLock {
     ///
     /// The returned guard releases the lock when dropped.
     pub fn lock(&mut self) -> Result<FileLockGuard<'_>> {
-        loop {
-            match self.file.lock() {
-                Ok(()) => return Ok(FileLockGuard::new(self)),
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(error) => return Err(Error::new(ErrorOperation::Lock, error)),
-            }
-        }
+        self.blocking_acquire(File::lock)?;
+        Ok(FileLockGuard::new(self))
     }
 
     /// Acquires a shared lock, blocking until it becomes available.
@@ -88,12 +87,57 @@ impl FileLock {
     /// shared lock on the same file at the same time, but no exclusive lock
     /// can be held concurrently.
     pub fn lock_shared(&mut self) -> Result<FileLockGuard<'_>> {
-        loop {
-            match self.file.lock_shared() {
-                Ok(()) => return Ok(FileLockGuard::new(self)),
-                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(error) => return Err(Error::new(ErrorOperation::Lock, error)),
-            }
+        self.blocking_acquire(File::lock_shared)?;
+        Ok(FileLockGuard::new(self))
+    }
+
+    /// Acquires an exclusive lock, blocking until it becomes available, and
+    /// returns a guard that owns this `FileLock`.
+    ///
+    /// Unlike [`lock`](FileLock::lock), the returned guard does not borrow
+    /// this value, so it can be stored in long-lived structures or moved
+    /// across threads. [`OwnedFileLockGuard::unlock`] returns the `FileLock`
+    /// for reuse.
+    pub fn lock_owned(self) -> Result<OwnedFileLockGuard> {
+        self.blocking_acquire(File::lock)?;
+        Ok(OwnedFileLockGuard::new(self))
+    }
+
+    /// Acquires a shared lock, blocking until it becomes available, and
+    /// returns a guard that owns this `FileLock`.
+    ///
+    /// See [`lock_owned`](FileLock::lock_owned).
+    pub fn lock_shared_owned(self) -> Result<OwnedFileLockGuard> {
+        self.blocking_acquire(File::lock_shared)?;
+        Ok(OwnedFileLockGuard::new(self))
+    }
+
+    /// Acquires an exclusive lock, waiting at most `timeout`.
+    ///
+    /// Returns `Ok(None)` when the lock could not be acquired within the
+    /// timeout, and `Ok(Some(_))` when the lock was acquired. A zero timeout
+    /// behaves like [`try_lock`](FileLock::try_lock).
+    ///
+    /// Waiting is implemented by polling the platform's non-blocking lock
+    /// operation with bounded exponential backoff, so the actual wait may
+    /// exceed `timeout` by up to one backoff interval (at most 50ms) plus
+    /// scheduling delays.
+    pub fn lock_timeout(&mut self, timeout: Duration) -> Result<Option<FileLockGuard<'_>>> {
+        if self.wait_timeout(File::try_lock, timeout)? {
+            Ok(Some(FileLockGuard::new(self)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Acquires a shared lock, waiting at most `timeout`.
+    ///
+    /// See [`lock_timeout`](FileLock::lock_timeout).
+    pub fn lock_shared_timeout(&mut self, timeout: Duration) -> Result<Option<FileLockGuard<'_>>> {
+        if self.wait_timeout(File::try_lock_shared, timeout)? {
+            Ok(Some(FileLockGuard::new(self)))
+        } else {
+            Ok(None)
         }
     }
 
@@ -118,6 +162,43 @@ impl FileLock {
             Ok(Some(FileLockGuard::new(self)))
         } else {
             Ok(None)
+        }
+    }
+
+    fn blocking_acquire(&self, lock: fn(&File) -> io::Result<()>) -> Result<()> {
+        loop {
+            match lock(&self.file) {
+                Ok(()) => return Ok(()),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                Err(error) => return Err(Error::new(ErrorOperation::Lock, error)),
+            }
+        }
+    }
+
+    fn wait_timeout(
+        &self,
+        try_lock: fn(&File) -> std::result::Result<(), TryLockError>,
+        timeout: Duration,
+    ) -> Result<bool> {
+        // A timeout too large to represent as a deadline waits unboundedly.
+        let deadline = Instant::now().checked_add(timeout);
+        let mut retry_delay = INITIAL_RETRY_DELAY;
+
+        loop {
+            if self.try_acquire(try_lock)? {
+                return Ok(true);
+            }
+
+            let mut sleep_for = retry_delay;
+            if let Some(deadline) = deadline {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    return Ok(false);
+                }
+                sleep_for = sleep_for.min(remaining);
+            }
+            std::thread::sleep(sleep_for);
+            retry_delay = retry_delay.saturating_mul(2).min(MAX_RETRY_DELAY);
         }
     }
 
