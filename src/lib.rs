@@ -43,7 +43,7 @@
 //! } else {
 //!     // The lock is currently held elsewhere.
 //! }
-//! # Ok::<(), filelock::Error>(())
+//! # Ok::<(), std::io::Error>(())
 //! ```
 //!
 //! Shared (read) locks allow multiple holders at once, while still excluding
@@ -52,7 +52,7 @@
 //! ```no_run
 //! let mut lock = filelock::new("myfile.lock")?;
 //! let _guard = lock.lock_shared()?;
-//! # Ok::<(), filelock::Error>(())
+//! # Ok::<(), std::io::Error>(())
 //! ```
 //!
 //! To wait for a lock with an upper bound on the wait:
@@ -66,7 +66,7 @@
 //! } else {
 //!     // The lock is still held elsewhere.
 //! }
-//! # Ok::<(), filelock::Error>(())
+//! # Ok::<(), std::io::Error>(())
 //! ```
 //!
 //! The guards returned by `lock()` and friends borrow the `FileLock`. When a
@@ -80,7 +80,7 @@
 //!     let _guard = guard;
 //!     // Critical section runs on another thread.
 //! });
-//! # Ok::<(), filelock::Error>(())
+//! # Ok::<(), std::io::Error>(())
 //! ```
 //!
 //! With the optional `tokio` feature, a contended lock can be acquired without
@@ -88,7 +88,7 @@
 //!
 //! ```no_run
 //! # #[cfg(feature = "tokio")]
-//! # async fn example() -> Result<(), filelock::Error> {
+//! # async fn example() -> std::io::Result<()> {
 //! let mut lock = filelock::new("myfile.lock")?;
 //! let _guard = lock.lock_async().await?;
 //!
@@ -116,9 +116,6 @@
 mod guard;
 pub use guard::{FileLockGuard, OwnedFileLockGuard};
 
-mod error;
-pub use error::{Error, ErrorOperation, Result};
-
 mod lock;
 pub use lock::FileLock;
 
@@ -139,7 +136,7 @@ use std::path::Path;
 /// let mut lock = filelock::new("myfile.lock").unwrap();
 /// let _guard = lock.lock().unwrap();
 /// ```
-pub fn new<P: AsRef<Path>>(filename: P) -> Result<FileLock> {
+pub fn new<P: AsRef<Path>>(filename: P) -> std::io::Result<FileLock> {
     FileLock::new(filename)
 }
 

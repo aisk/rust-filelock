@@ -1,7 +1,7 @@
 mod common;
 
 use common::TestDir;
-use filelock::{ErrorOperation, FileLock};
+use filelock::FileLock;
 
 #[test]
 fn test_open_error_recovery() {
@@ -9,11 +9,10 @@ fn test_open_error_recovery() {
     let directory = test_dir.path("missing");
     let filename = directory.join("test.lock");
 
-    let error = match FileLock::new(&filename) {
-        Err(error) => error,
-        Ok(_) => panic!("opening a lock file in a missing directory unexpectedly succeeded"),
-    };
-    assert_eq!(error.operation(), ErrorOperation::Open);
+    assert!(
+        FileLock::new(&filename).is_err(),
+        "opening a lock file in a missing directory unexpectedly succeeded"
+    );
 
     std::fs::create_dir(&directory).unwrap();
     let mut lock = FileLock::new(&filename).unwrap();
@@ -26,13 +25,10 @@ fn test_invalid_path_open() {
     let parent = test_dir.path("not-a-directory");
     std::fs::write(&parent, b"file").unwrap();
     let result = FileLock::new(parent.join("test.lock"));
-    let error = match result {
-        Err(error) => error,
-        Ok(_) => panic!("opening a lock file under a regular file unexpectedly succeeded"),
-    };
-    assert_eq!(error.operation(), ErrorOperation::Open);
-    assert!(std::error::Error::source(&error).is_some());
-    assert!(error.to_string().starts_with("failed to open lock file:"));
+    assert!(
+        result.is_err(),
+        "opening a lock file under a regular file unexpectedly succeeded"
+    );
 }
 
 #[cfg(unix)]
@@ -45,7 +41,6 @@ fn test_path_with_interior_nul_returns_error() {
         Err(error) => error,
         Ok(_) => panic!("path containing NUL unexpectedly succeeded"),
     };
-    assert_eq!(error.operation(), ErrorOperation::Open);
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
     assert_eq!(error.raw_os_error(), None);
 }
@@ -67,7 +62,6 @@ fn test_path_with_interior_nul_returns_error() {
         Ok(_) => panic!("path containing NUL unexpectedly succeeded"),
     };
 
-    assert_eq!(error.operation(), ErrorOperation::Open);
     assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
     assert!(
         !prefix.exists(),
@@ -89,14 +83,14 @@ fn test_file_permission_denied() {
     std::fs::set_permissions(&filename, std::fs::Permissions::from_mode(0o000)).unwrap();
 
     let denied = match FileLock::new(&filename) {
-        Err(error) => Some(error.operation()),
+        Err(error) => Some(error.kind()),
         // Root (or a capable process) may open the file regardless.
         Ok(_) => None,
     };
 
     std::fs::set_permissions(&filename, std::fs::Permissions::from_mode(0o644)).unwrap();
-    if let Some(operation) = denied {
-        assert_eq!(operation, ErrorOperation::Open);
+    if let Some(kind) = denied {
+        assert_eq!(kind, std::io::ErrorKind::PermissionDenied);
     }
 }
 

@@ -1,6 +1,6 @@
-use crate::{Error, ErrorOperation, FileLockGuard, OwnedFileLockGuard, Result};
+use crate::{FileLockGuard, OwnedFileLockGuard};
 use std::fs::{File, OpenOptions, TryLockError};
-use std::io;
+use std::io::{self, Result};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -32,7 +32,7 @@ impl FileLock {
     ///
     /// let mut lock = FileLock::new("myfile.lock")?;
     /// let _guard = lock.lock()?;
-    /// # Ok::<(), filelock::Error>(())
+    /// # Ok::<(), std::io::Error>(())
     /// ```
     pub fn new<P: AsRef<Path>>(filename: P) -> Result<FileLock> {
         let mut options = OpenOptions::new();
@@ -42,10 +42,9 @@ impl FileLock {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o644);
         }
-        let file = options
-            .open(filename)
-            .map_err(|error| Error::new(ErrorOperation::Open, error))?;
-        Ok(FileLock { file })
+        Ok(FileLock {
+            file: options.open(filename)?,
+        })
     }
 
     /// Wraps an already-open file so it can be locked through this API.
@@ -98,6 +97,15 @@ impl FileLock {
     /// this value, so it can be stored in long-lived structures or moved
     /// across threads. [`OwnedFileLockGuard::unlock`] returns the `FileLock`
     /// for reuse.
+    ///
+    /// There are deliberately no owned variants of
+    /// [`try_lock`](FileLock::try_lock) and
+    /// [`lock_timeout`](FileLock::lock_timeout): they consume `self`, and on
+    /// contention the `FileLock` could not be returned without an awkward
+    /// nested-result signature. Use the borrowing variants for conditional
+    /// acquisition, then release and call an owned method once the lock is
+    /// known to be available, or simply reopen with
+    /// [`new`](FileLock::new).
     pub fn lock_owned(self) -> Result<OwnedFileLockGuard> {
         self.blocking_acquire(File::lock)?;
         Ok(OwnedFileLockGuard::new(self))
@@ -121,7 +129,10 @@ impl FileLock {
     /// Waiting is implemented by polling the platform's non-blocking lock
     /// operation with bounded exponential backoff, so the actual wait may
     /// exceed `timeout` by up to one backoff interval (at most 50ms) plus
-    /// scheduling delays.
+    /// scheduling delays. Polling also means waiters are not queued fairly:
+    /// under sustained contention there is no FIFO ordering among waiters,
+    /// unlike the blocking [`lock`](FileLock::lock), which waits in the
+    /// operating system's lock queue.
     pub fn lock_timeout(&mut self, timeout: Duration) -> Result<Option<FileLockGuard<'_>>> {
         if self.wait_timeout(File::try_lock, timeout)? {
             Ok(Some(FileLockGuard::new(self)))
@@ -168,9 +179,8 @@ impl FileLock {
     fn blocking_acquire(&self, lock: fn(&File) -> io::Result<()>) -> Result<()> {
         loop {
             match lock(&self.file) {
-                Ok(()) => return Ok(()),
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(error) => return Err(Error::new(ErrorOperation::Lock, error)),
+                result => return result,
             }
         }
     }
@@ -213,16 +223,12 @@ impl FileLock {
                 Err(TryLockError::Error(error)) if error.kind() == io::ErrorKind::Interrupted => {
                     continue;
                 }
-                Err(TryLockError::Error(error)) => {
-                    return Err(Error::new(ErrorOperation::Lock, error));
-                }
+                Err(TryLockError::Error(error)) => return Err(error),
             }
         }
     }
 
     pub(crate) fn unlock(&mut self) -> Result<()> {
-        self.file
-            .unlock()
-            .map_err(|error| Error::new(ErrorOperation::Unlock, error))
+        self.file.unlock()
     }
 }

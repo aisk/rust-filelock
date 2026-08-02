@@ -75,6 +75,9 @@ std::thread::spawn(move || {
 });
 ```
 
+There are deliberately no owned `try_lock`/`lock_timeout` variants: they
+would consume the `FileLock` without being able to return it on contention.
+
 For manual control:
 
 ```rust
@@ -127,19 +130,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 asynchronous, bounded backoff, so lock contention does not park a Tokio
 runtime worker. They can be used with `tokio::time::timeout` or
 `tokio::select!`, and cancelling the wait does not leave a blocking task
-running in the background. Do not call the synchronous `lock()` from a Tokio
-runtime worker when the lock may be contended.
+running in the background. Because waiting is polling-based, acquisition can
+lag the lock's release by up to 50ms, and waiters are not queued fairly (no
+FIFO ordering under sustained contention); the same applies to the
+polling-based `lock_timeout()`. Do not call the synchronous `lock()` from a
+Tokio runtime worker when the lock may be contended.
 
-Errors are reported as `filelock::Error`. The error identifies which operation failed and exposes both a portable `std::io::ErrorKind` and, when available, the platform-specific error code:
-
-```rust
-use filelock::{ErrorOperation, FileLock};
-
-if let Err(error) = FileLock::new("missing/directory/myfile.lock") {
-    assert_eq!(error.operation(), ErrorOperation::Open);
-    eprintln!("{} ({:?})", error, error.kind());
-}
-```
+Errors are reported as plain `std::io::Error`. Each operation is a separate
+method (`new` opens, `lock*` acquires, `unlock` releases), so the failing
+operation is always evident from the call site and no custom error type is
+needed.
 
 ## Platform behavior
 

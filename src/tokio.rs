@@ -1,6 +1,7 @@
 use crate::lock::{INITIAL_RETRY_DELAY, MAX_RETRY_DELAY};
-use crate::{FileLock, FileLockGuard, OwnedFileLockGuard, Result};
+use crate::{FileLock, FileLockGuard, OwnedFileLockGuard};
 use std::fs::File;
+use std::io::Result;
 
 impl FileLock {
     /// Acquires an exclusive lock, waiting asynchronously while it is held
@@ -11,6 +12,12 @@ impl FileLock {
     /// unavailable. Lock contention therefore does not park a Tokio runtime
     /// worker. Dropping the returned future leaves no background lock operation
     /// behind.
+    ///
+    /// Because waiting is polling-based, acquisition can lag the lock's
+    /// release by up to one backoff interval (at most 50ms), and waiters are
+    /// not queued fairly: under sustained contention there is no FIFO
+    /// ordering, unlike the blocking [`lock`](FileLock::lock), which waits in
+    /// the operating system's lock queue.
     ///
     /// This method requires the `tokio` crate feature and must be called from a
     /// Tokio runtime with time enabled.
@@ -24,7 +31,7 @@ impl FileLock {
     ///
     /// ```no_run
     /// # #[cfg(feature = "tokio")]
-    /// # async fn example() -> Result<(), filelock::Error> {
+    /// # async fn example() -> std::io::Result<()> {
     /// let mut lock = filelock::FileLock::new("myfile.lock")?;
     /// let _guard = lock.lock_async().await?;
     ///
