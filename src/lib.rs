@@ -43,6 +43,20 @@
 //! # Ok::<(), filelock::Error>(())
 //! ```
 //!
+//! With the optional `tokio` feature, a contended lock can be acquired without
+//! blocking a Tokio runtime worker on lock contention:
+//!
+//! ```no_run
+//! # #[cfg(feature = "tokio")]
+//! # async fn example() -> Result<(), filelock::Error> {
+//! let mut lock = filelock::new("myfile.lock");
+//! let _guard = lock.lock_async().await?;
+//!
+//! // Perform async critical operations
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! For manual control:
 //!
 //! ```no_run
@@ -74,6 +88,9 @@ pub use unix::FileLock;
 pub mod windows;
 #[cfg(windows)]
 pub use windows::FileLock;
+
+#[cfg(feature = "tokio")]
+mod tokio;
 
 use std::path::Path;
 

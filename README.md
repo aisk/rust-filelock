@@ -48,6 +48,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Tokio
+
+Enable the optional `tokio` feature to wait for a contended lock without
+blocking a Tokio runtime worker:
+
+```sh
+cargo add filelock --features tokio
+cargo add tokio --features macros,rt-multi-thread,time
+```
+
+The second command is unnecessary when the application already has a Tokio
+dependency with a runtime, macros, and time enabled.
+
+```rust
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut lock = filelock::new("myfile.lock");
+    let _guard = lock.lock_async().await?;
+
+    // Perform async critical operations
+
+    Ok(())
+}
+```
+
+`lock_async()` uses non-blocking lock attempts and asynchronous, bounded
+backoff, so lock contention does not park a Tokio runtime worker. It can be
+used with `tokio::time::timeout` or `tokio::select!`, and cancelling the wait
+does not leave a blocking task running in the background. Each attempt still
+uses an ordinary synchronous filesystem call to open the lock file; that call
+may itself block on a slow or remote filesystem. Do not call the synchronous
+`lock()` from a Tokio runtime worker when the lock may be contended.
+
 Errors are reported as `filelock::Error`. The error identifies which operation failed and exposes both a portable `std::io::ErrorKind` and, when available, the platform-specific error code:
 
 ```rust

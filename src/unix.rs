@@ -59,6 +59,14 @@ impl FileLock {
     /// Returns `Ok(None)` when another process or thread currently holds the
     /// lock, and `Ok(Some(_))` when the lock was acquired.
     pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>> {
+        if self.try_lock_inner()? {
+            Ok(Some(FileLockGuard::new(self)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub(crate) fn try_lock_inner(&mut self) -> Result<bool> {
         unsafe {
             let c_filename = CString::new(self.filename.as_os_str().as_bytes()).map_err(|_| {
                 Error::new(
@@ -75,18 +83,26 @@ impl FileLock {
                 return Err(Error::new(ErrorOperation::Open, io::Error::last_os_error()));
             }
 
-            if libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) != 0 {
+            loop {
+                if libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) == 0 {
+                    break;
+                }
+
                 let lock_error = io::Error::last_os_error();
+                if lock_error.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+
                 libc::close(fd);
                 if matches!(lock_error.raw_os_error(), Some(code) if code == libc::EWOULDBLOCK || code == libc::EAGAIN)
                 {
-                    return Ok(None);
+                    return Ok(false);
                 }
                 return Err(Error::new(ErrorOperation::Lock, lock_error));
             }
 
             self.fd = fd;
-            Ok(Some(FileLockGuard::new(self)))
+            Ok(true)
         }
     }
 

@@ -10,6 +10,15 @@ readme = "README.md"
 keywords = ["file", "lock", "flock", "locking", "mutex"]
 categories = ["filesystem", "concurrency"]
 
+[features]
+tokio = ["dep:tokio"]
+
+[dependencies]
+tokio = { version = "1", optional = true, features = ["time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
+
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "^0.3", features = ["handleapi", "fileapi", "winerror"] }
 

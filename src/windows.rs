@@ -93,6 +93,14 @@ impl FileLock {
     /// Returns `Ok(None)` when another process or thread currently holds the
     /// lock, and `Ok(Some(_))` when the lock was acquired.
     pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>> {
+        if self.try_lock_inner()? {
+            Ok(Some(FileLockGuard::new(self)))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub(crate) fn try_lock_inner(&mut self) -> Result<bool> {
         self.open()?;
         let handle: winapi::um::winnt::HANDLE =
             self.handle.as_ref().unwrap().as_raw_handle().cast();
@@ -115,13 +123,13 @@ impl FileLock {
                 if lock_error.raw_os_error()
                     == Some(winapi::shared::winerror::ERROR_LOCK_VIOLATION as i32)
                 {
-                    return Ok(None);
+                    return Ok(false);
                 }
                 return Err(Error::new(ErrorOperation::Lock, lock_error));
             }
         }
 
-        Ok(Some(FileLockGuard::new(self)))
+        Ok(true)
     }
 
     pub(crate) fn unlock(&mut self) -> Result<()> {
