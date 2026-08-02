@@ -24,10 +24,10 @@ impl<'a> FileLockGuard<'a> {
     /// This can be used to read or write auxiliary data stored in the lock
     /// file, such as the holder's process id, while the lock is held.
     ///
-    /// The returned reference also exposes the standard library's locking
-    /// methods (such as `File::unlock`). Do not call them through this
-    /// reference: they act on the same underlying lock and would release it
-    /// while this guard still believes it is held.
+    /// On Rust 1.89 and newer the returned reference also exposes the standard
+    /// library's locking methods (such as `File::unlock`). Do not call them
+    /// through this reference: they act on the same underlying lock and would
+    /// release it while this guard still believes it is held.
     pub fn file(&self) -> &std::fs::File {
         self.lock.file()
     }
@@ -88,10 +88,10 @@ impl OwnedFileLockGuard {
     /// This can be used to read or write auxiliary data stored in the lock
     /// file, such as the holder's process id, while the lock is held.
     ///
-    /// The returned reference also exposes the standard library's locking
-    /// methods (such as `File::unlock`). Do not call them through this
-    /// reference: they act on the same underlying lock and would release it
-    /// while this guard still believes it is held.
+    /// On Rust 1.89 and newer the returned reference also exposes the standard
+    /// library's locking methods (such as `File::unlock`). Do not call them
+    /// through this reference: they act on the same underlying lock and would
+    /// release it while this guard still believes it is held.
     pub fn file(&self) -> &std::fs::File {
         self.lock.as_ref().unwrap().file()
     }

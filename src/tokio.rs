@@ -1,4 +1,5 @@
 use crate::lock::{INITIAL_RETRY_DELAY, MAX_RETRY_DELAY};
+use crate::sys::{self, TryLockError};
 use crate::{FileLock, FileLockGuard, OwnedFileLockGuard};
 use std::fs::File;
 use std::io::Result;
@@ -37,7 +38,7 @@ impl FileLock {
     /// # }
     /// ```
     pub async fn lock_async(&mut self) -> Result<FileLockGuard<'_>> {
-        self.wait_async(File::try_lock).await?;
+        self.wait_async(sys::try_lock).await?;
         Ok(FileLockGuard::new(self))
     }
 
@@ -47,7 +48,7 @@ impl FileLock {
     /// See [`lock_async`](FileLock::lock_async) for runtime requirements and
     /// cancellation behavior.
     pub async fn lock_shared_async(&mut self) -> Result<FileLockGuard<'_>> {
-        self.wait_async(File::try_lock_shared).await?;
+        self.wait_async(sys::try_lock_shared).await?;
         Ok(FileLockGuard::new(self))
     }
 
@@ -61,7 +62,7 @@ impl FileLock {
     /// See [`lock_async`](FileLock::lock_async) for runtime requirements and
     /// cancellation behavior.
     pub async fn lock_owned_async(self) -> Result<OwnedFileLockGuard> {
-        self.wait_async(File::try_lock).await?;
+        self.wait_async(sys::try_lock).await?;
         Ok(OwnedFileLockGuard::new(self))
     }
 
@@ -70,13 +71,13 @@ impl FileLock {
     ///
     /// See [`lock_owned_async`](FileLock::lock_owned_async).
     pub async fn lock_shared_owned_async(self) -> Result<OwnedFileLockGuard> {
-        self.wait_async(File::try_lock_shared).await?;
+        self.wait_async(sys::try_lock_shared).await?;
         Ok(OwnedFileLockGuard::new(self))
     }
 
     async fn wait_async(
         &self,
-        try_lock: fn(&File) -> std::result::Result<(), std::fs::TryLockError>,
+        try_lock: fn(&File) -> std::result::Result<(), TryLockError>,
     ) -> Result<()> {
         let mut retry_delay = INITIAL_RETRY_DELAY;
 

@@ -3,7 +3,7 @@ mod common;
 use common::TestDir;
 use filelock::FileLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, mpsc};
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 

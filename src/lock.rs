@@ -1,5 +1,6 @@
+use crate::sys::{self, TryLockError};
 use crate::{FileLockGuard, OwnedFileLockGuard};
-use std::fs::{File, OpenOptions, TryLockError};
+use std::fs::{File, OpenOptions};
 use std::io::{self, Result};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -51,7 +52,8 @@ impl FileLock {
     ///
     /// This allows customizing how the lock file is opened (permissions,
     /// open options, pre-existing temporary files, and so on). On Windows the
-    /// file must be opened with read or write access for locking to succeed.
+    /// file must be opened with read or write access for locking to succeed;
+    /// handles opened for overlapped I/O are supported.
     pub fn from_file(file: File) -> FileLock {
         FileLock { file }
     }
@@ -76,7 +78,7 @@ impl FileLock {
     ///
     /// The returned guard releases the lock when dropped.
     pub fn lock(&mut self) -> Result<FileLockGuard<'_>> {
-        self.blocking_acquire(File::lock)?;
+        self.blocking_acquire(sys::lock)?;
         Ok(FileLockGuard::new(self))
     }
 
@@ -86,7 +88,7 @@ impl FileLock {
     /// shared lock on the same file at the same time, but no exclusive lock
     /// can be held concurrently.
     pub fn lock_shared(&mut self) -> Result<FileLockGuard<'_>> {
-        self.blocking_acquire(File::lock_shared)?;
+        self.blocking_acquire(sys::lock_shared)?;
         Ok(FileLockGuard::new(self))
     }
 
@@ -104,7 +106,7 @@ impl FileLock {
     /// borrowing variants for conditional acquisition, or reopen with
     /// [`new`](FileLock::new).
     pub fn lock_owned(self) -> Result<OwnedFileLockGuard> {
-        self.blocking_acquire(File::lock)?;
+        self.blocking_acquire(sys::lock)?;
         Ok(OwnedFileLockGuard::new(self))
     }
 
@@ -113,7 +115,7 @@ impl FileLock {
     ///
     /// See [`lock_owned`](FileLock::lock_owned).
     pub fn lock_shared_owned(self) -> Result<OwnedFileLockGuard> {
-        self.blocking_acquire(File::lock_shared)?;
+        self.blocking_acquire(sys::lock_shared)?;
         Ok(OwnedFileLockGuard::new(self))
     }
 
@@ -131,7 +133,7 @@ impl FileLock {
     /// unlike the blocking [`lock`](FileLock::lock), which waits in the
     /// operating system's lock queue.
     pub fn lock_timeout(&mut self, timeout: Duration) -> Result<Option<FileLockGuard<'_>>> {
-        if self.wait_timeout(File::try_lock, timeout)? {
+        if self.wait_timeout(sys::try_lock, timeout)? {
             Ok(Some(FileLockGuard::new(self)))
         } else {
             Ok(None)
@@ -142,7 +144,7 @@ impl FileLock {
     ///
     /// See [`lock_timeout`](FileLock::lock_timeout).
     pub fn lock_shared_timeout(&mut self, timeout: Duration) -> Result<Option<FileLockGuard<'_>>> {
-        if self.wait_timeout(File::try_lock_shared, timeout)? {
+        if self.wait_timeout(sys::try_lock_shared, timeout)? {
             Ok(Some(FileLockGuard::new(self)))
         } else {
             Ok(None)
@@ -154,7 +156,7 @@ impl FileLock {
     /// Returns `Ok(None)` when another process or thread currently holds a
     /// conflicting lock, and `Ok(Some(_))` when the lock was acquired.
     pub fn try_lock(&mut self) -> Result<Option<FileLockGuard<'_>>> {
-        if self.try_acquire(File::try_lock)? {
+        if self.try_acquire(sys::try_lock)? {
             Ok(Some(FileLockGuard::new(self)))
         } else {
             Ok(None)
@@ -166,7 +168,7 @@ impl FileLock {
     /// Returns `Ok(None)` when an exclusive lock is currently held elsewhere,
     /// and `Ok(Some(_))` when the lock was acquired.
     pub fn try_lock_shared(&mut self) -> Result<Option<FileLockGuard<'_>>> {
-        if self.try_acquire(File::try_lock_shared)? {
+        if self.try_acquire(sys::try_lock_shared)? {
             Ok(Some(FileLockGuard::new(self)))
         } else {
             Ok(None)
@@ -226,6 +228,6 @@ impl FileLock {
     }
 
     pub(crate) fn unlock(&mut self) -> Result<()> {
-        self.file.unlock()
+        sys::unlock(&self.file)
     }
 }

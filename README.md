@@ -2,10 +2,10 @@
 
 [![Rust](https://github.com/aisk/rust-filelock/actions/workflows/ci.yml/badge.svg)](https://github.com/aisk/rust-filelock/actions/workflows/ci.yml)
 
-A simple file locking library for Rust. Locking is implemented with the
-standard library's file locking APIs (`std::fs::File::lock` and friends),
-which use `flock` (or `fcntl` where `flock` is unavailable) on Unix-like
-systems and `LockFileEx` on Windows.
+A simple file locking library for Rust. On Rust 1.89 and newer, locking uses
+the standard library's `std::fs::File::lock` API. Rust 1.71 through 1.88 use a
+backport of that implementation from Rust 1.97.1, preserving the same
+platform behavior and interoperability.
 
 ![](https://repository-images.githubusercontent.com/403675076/cd5f3635-33cf-4905-8315-1e7aee048c0d)
 
@@ -120,6 +120,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+On Windows, `from_file` also supports handles opened for overlapped I/O.
+
 ### Tokio
 
 Enable the optional `tokio` feature to wait for a contended lock without
@@ -153,6 +155,11 @@ contended.
 
 ## Platform behavior
 
+On Linux, the BSDs, Apple platforms, Illumos, AIX, and the other Unix targets
+supported by the standard-library implementation, locks use `flock`. Solaris
+uses `fcntl` record locks covering the entire file. Windows uses `LockFileEx`.
+Other targets return `std::io::ErrorKind::Unsupported` from lock operations.
+
 - Every participant must use this locking protocol and resolve the same stable lock-file path. Do not delete, rename, or replace the lock file while participants may be running; doing so can let processes lock different underlying files.
 - Locks are advisory and associated with the opened file, not its path. Uncooperative processes can still access the lock file, and a process must not `fork` while holding a guard and then let both parent and child continue through the protected critical section.
 - Lock files are opened read-write and, on Unix, created with mode `0644` before applying the process umask. Cross-user locking therefore requires permissions to be arranged explicitly.
@@ -161,7 +168,15 @@ contended.
 
 ## Minimum supported Rust version
 
-Rust 1.89, which stabilized the standard library's file locking APIs.
+Rust 1.71, including when the optional `tokio` feature is enabled. Builds with
+Rust 1.89 and newer use the standard library's native file-lock API; Rust
+1.71–1.88 automatically use the bundled compatibility implementation. This
+backend selection is internal and does not change the public API.
+
+The compatibility implementation is derived from the Rust 1.97.1 standard
+library's Unix and Windows file-locking implementations, which are licensed
+under Apache-2.0 OR MIT. Source and license attribution is retained in the
+corresponding implementation files.
 
 ## Documentation
 

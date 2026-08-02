@@ -4,9 +4,9 @@ mod common;
 
 use common::TestDir;
 use filelock::FileLock;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 

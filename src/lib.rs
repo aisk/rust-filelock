@@ -3,6 +3,8 @@
 mod guard;
 pub use guard::{FileLockGuard, OwnedFileLockGuard};
 
+mod sys;
+
 mod lock;
 pub use lock::FileLock;
 
