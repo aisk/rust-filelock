@@ -13,11 +13,8 @@ impl FileLock {
     /// worker. Dropping the returned future leaves no background lock operation
     /// behind.
     ///
-    /// Because waiting is polling-based, acquisition can lag the lock's
-    /// release by up to one backoff interval (at most 50ms), and waiters are
-    /// not queued fairly: under sustained contention there is no FIFO
-    /// ordering, unlike the blocking [`lock`](FileLock::lock), which waits in
-    /// the operating system's lock queue.
+    /// Waiting is polling-based, with the same latency and fairness caveats
+    /// as [`lock_timeout`](FileLock::lock_timeout).
     ///
     /// This method requires the `tokio` crate feature and must be called from a
     /// Tokio runtime with time enabled.

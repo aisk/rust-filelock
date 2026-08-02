@@ -11,6 +11,9 @@ readme = "README.md"
 keywords = ["file", "lock", "flock", "locking", "mutex"]
 categories = ["filesystem", "concurrency"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 tokio = ["dep:tokio"]
 

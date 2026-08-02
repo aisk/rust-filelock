@@ -2,7 +2,10 @@
 
 [![Rust](https://github.com/aisk/rust-filelock/actions/workflows/ci.yml/badge.svg)](https://github.com/aisk/rust-filelock/actions/workflows/ci.yml)
 
-Simple filelock library for rust, built on the standard library's file locking support (`std::fs::File::lock` and friends, stable since Rust 1.89). The standard library uses `flock` (or `fcntl` where `flock` is unavailable) on Unix-like systems and `LockFileEx` on Windows.
+A simple file locking library for Rust. Locking is implemented with the
+standard library's file locking APIs (`std::fs::File::lock` and friends),
+which use `flock` (or `fcntl` where `flock` is unavailable) on Unix-like
+systems and `LockFileEx` on Windows.
 
 ![](https://repository-images.githubusercontent.com/403675076/cd5f3635-33cf-4905-8315-1e7aee048c0d)
 
@@ -16,9 +19,9 @@ $ cargo add filelock
 
 ## Usage
 
-```rust
-use filelock;
+Acquire an exclusive lock, and let the guard release it:
 
+```rust,no_run
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut lock = filelock::new("myfile.lock")?;
     let _guard = lock.lock()?;
@@ -32,74 +35,90 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 `filelock::new` opens (and creates if missing) the lock file, and the file
 stays open for the lifetime of the `FileLock`, so repeated lock/unlock cycles
-reuse the same file descriptor or handle.
+reuse the same file descriptor or handle. All operations return
+`std::io::Result`.
 
-To attempt locking without waiting, or to take a shared (read) lock that
-multiple holders can share while excluding exclusive locks:
+A guard can also be released manually, which reports errors instead of
+ignoring them:
 
-```rust
-let mut lock = filelock::new("myfile.lock")?;
-
-if let Some(_guard) = lock.try_lock()? {
-    // The exclusive lock was acquired.
-}
-
-let _guard = lock.lock_shared()?;
-// try_lock_shared() is also available.
-```
-
-To wait with an upper bound, use `lock_timeout` / `lock_shared_timeout`:
-
-```rust
-use std::time::Duration;
-
-let mut lock = filelock::new("myfile.lock")?;
-if let Some(_guard) = lock.lock_timeout(Duration::from_secs(5))? {
-    // The lock was acquired within five seconds.
-} else {
-    // The lock is still held elsewhere.
-}
-```
-
-The guards returned by `lock()` and friends borrow the `FileLock`. When a
-guard needs to outlive the current scope — stored in a struct or moved into a
-spawned task — use the owned variants (`lock_owned`, `lock_shared_owned`, and
-with the `tokio` feature `lock_owned_async` / `lock_shared_owned_async`),
-which take ownership of the `FileLock` and return it on unlock:
-
-```rust
-let guard = filelock::new("myfile.lock")?.lock_owned()?;
-std::thread::spawn(move || {
-    let _guard = guard;
-    // Critical section runs on another thread.
-});
-```
-
-There are deliberately no owned `try_lock`/`lock_timeout` variants: they
-would consume the `FileLock` without being able to return it on contention.
-
-For manual control:
-
-```rust
-use filelock;
-
+```rust,no_run
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut lock = filelock::new("myfile.lock")?;
     let guard = lock.lock()?;
 
     // Perform critical operations
 
-    // Manually unlock with error handling
     guard.unlock()?;
+    Ok(())
+}
+```
+
+### Non-blocking, shared, and bounded waits
+
+`try_lock` attempts to lock without waiting, and `lock_timeout` waits with an
+upper bound. Shared (read) locks allow multiple holders at once, while still
+excluding exclusive locks:
+
+```rust,no_run
+use std::time::Duration;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut lock = filelock::new("myfile.lock")?;
+
+    if let Some(_guard) = lock.try_lock()? {
+        // The exclusive lock was acquired without waiting.
+    }
+
+    if let Some(_guard) = lock.lock_timeout(Duration::from_secs(5))? {
+        // The lock was acquired within five seconds.
+    }
+
+    let _guard = lock.lock_shared()?;
+    // try_lock_shared() and lock_shared_timeout() are also available.
 
     Ok(())
 }
 ```
 
-An already-open `std::fs::File` can also be locked via
-`FileLock::from_file(file)`, and the underlying file is accessible through
-`FileLockGuard::file()` while the lock is held (for example to store the
-holder's process id in the lock file).
+### Owned guards
+
+The guards returned by `lock()` and friends borrow the `FileLock`. When a
+guard needs to outlive the current scope, for example stored in a struct or
+moved into a spawned task, use the owned variants (`lock_owned`,
+`lock_shared_owned`, and with the `tokio` feature `lock_owned_async` /
+`lock_shared_owned_async`), which take ownership of the `FileLock` and return
+it on unlock:
+
+```rust,no_run
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let guard = filelock::new("myfile.lock")?.lock_owned()?;
+    std::thread::spawn(move || {
+        let _guard = guard;
+        // Critical section runs on another thread.
+    });
+    Ok(())
+}
+```
+
+### Using an existing file
+
+An already-open `std::fs::File` can be locked via `FileLock::from_file`,
+which allows customizing how the lock file is opened. While the lock is held,
+the underlying file is accessible through the guard's `file()` method, for
+example to store the holder's process id in the lock file:
+
+```rust,no_run
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open("myfile.lock")?;
+    let mut lock = filelock::FileLock::from_file(file);
+    let _guard = lock.lock()?;
+    Ok(())
+}
+```
 
 ### Tokio
 
@@ -108,16 +127,12 @@ blocking a Tokio runtime worker:
 
 ```sh
 cargo add filelock --features tokio
-cargo add tokio --features macros,rt-multi-thread,time
 ```
 
-The second command is unnecessary when the application already has a Tokio
-dependency with a runtime, macros, and time enabled.
-
-```rust
+```rust,ignore
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut lock = filelock::new("myfile.lock");
+    let mut lock = filelock::new("myfile.lock")?;
     let _guard = lock.lock_async().await?;
 
     // Perform async critical operations
@@ -126,20 +141,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`lock_async()` (and `lock_shared_async()`) use non-blocking lock attempts and
+`lock_async()` and `lock_shared_async()` use non-blocking lock attempts and
 asynchronous, bounded backoff, so lock contention does not park a Tokio
 runtime worker. They can be used with `tokio::time::timeout` or
 `tokio::select!`, and cancelling the wait does not leave a blocking task
-running in the background. Because waiting is polling-based, acquisition can
-lag the lock's release by up to 50ms, and waiters are not queued fairly (no
-FIFO ordering under sustained contention); the same applies to the
-polling-based `lock_timeout()`. Do not call the synchronous `lock()` from a
-Tokio runtime worker when the lock may be contended.
-
-Errors are reported as plain `std::io::Error`. Each operation is a separate
-method (`new` opens, `lock*` acquires, `unlock` releases), so the failing
-operation is always evident from the call site and no custom error type is
-needed.
+running in the background. Waiting is polling-based, with the same caveats as
+`lock_timeout`: acquisition can lag the lock's release by up to 50ms, and
+waiters are not queued in FIFO order under sustained contention. Do not call
+the synchronous `lock()` from a Tokio runtime worker when the lock may be
+contended.
 
 ## Platform behavior
 
@@ -151,7 +161,7 @@ needed.
 
 ## Minimum supported Rust version
 
-Rust 1.89, which stabilized `std`'s file locking APIs.
+Rust 1.89, which stabilized the standard library's file locking APIs.
 
 ## Documentation
 

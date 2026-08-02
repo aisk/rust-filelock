@@ -98,13 +98,10 @@ impl FileLock {
     /// across threads. [`OwnedFileLockGuard::unlock`] returns the `FileLock`
     /// for reuse.
     ///
-    /// There are deliberately no owned variants of
-    /// [`try_lock`](FileLock::try_lock) and
-    /// [`lock_timeout`](FileLock::lock_timeout): they consume `self`, and on
-    /// contention the `FileLock` could not be returned without an awkward
-    /// nested-result signature. Use the borrowing variants for conditional
-    /// acquisition, then release and call an owned method once the lock is
-    /// known to be available, or simply reopen with
+    /// There are no owned variants of [`try_lock`](FileLock::try_lock) and
+    /// [`lock_timeout`](FileLock::lock_timeout), because on contention they
+    /// could not return both the failure and the consumed `FileLock`. Use the
+    /// borrowing variants for conditional acquisition, or reopen with
     /// [`new`](FileLock::new).
     pub fn lock_owned(self) -> Result<OwnedFileLockGuard> {
         self.blocking_acquire(File::lock)?;
