@@ -4,12 +4,12 @@ use common::TestDir;
 use filelock::FileLock;
 
 #[test]
-fn test_new_does_not_create_lock_file() {
+fn test_new_creates_lock_file() {
     let test_dir = TestDir::new("new");
     let filename = test_dir.path("test.lock");
 
-    let lock = FileLock::new(&filename);
-    assert!(!filename.exists());
+    let lock = FileLock::new(&filename).unwrap();
+    assert!(filename.exists(), "new() should create the lock file");
 
     drop(lock);
 }
@@ -17,7 +17,7 @@ fn test_new_does_not_create_lock_file() {
 #[test]
 fn test_basic_lock_and_unlock() {
     let test_dir = TestDir::new("basic");
-    let mut lock = FileLock::new(test_dir.path("test.lock"));
+    let mut lock = FileLock::new(test_dir.path("test.lock")).unwrap();
 
     // Test manual unlock
     let guard = lock.lock().unwrap();
@@ -31,7 +31,7 @@ fn test_basic_lock_and_unlock() {
 #[test]
 fn test_raii_automatic_unlock() {
     let test_dir = TestDir::new("raii");
-    let mut lock = FileLock::new(test_dir.path("test.lock"));
+    let mut lock = FileLock::new(test_dir.path("test.lock")).unwrap();
 
     {
         let _guard = lock.lock().unwrap();
@@ -45,7 +45,7 @@ fn test_raii_automatic_unlock() {
 #[test]
 fn test_try_lock_when_available() {
     let test_dir = TestDir::new("try-available");
-    let mut lock = FileLock::new(test_dir.path("test.lock"));
+    let mut lock = FileLock::new(test_dir.path("test.lock")).unwrap();
 
     let guard = lock.try_lock().unwrap();
     assert!(guard.is_some());
@@ -55,8 +55,8 @@ fn test_try_lock_when_available() {
 fn test_multiple_instances_same_file() {
     let test_dir = TestDir::new("instances");
     let filename = test_dir.path("test.lock");
-    let mut lock1 = FileLock::new(&filename);
-    let mut lock2 = FileLock::new(&filename);
+    let mut lock1 = FileLock::new(&filename).unwrap();
+    let mut lock2 = FileLock::new(&filename).unwrap();
 
     // First instance acquires lock
     let guard1 = lock1.lock().unwrap();
@@ -72,7 +72,7 @@ fn test_lock_file_persists_after_release() {
     let filename = test_dir.path("test.lock");
 
     {
-        let mut lock = FileLock::new(&filename);
+        let mut lock = FileLock::new(&filename).unwrap();
         let _guard = lock.lock().unwrap();
 
         // Verify the lock file exists while locked
@@ -83,4 +83,32 @@ fn test_lock_file_persists_after_release() {
     // break cross-process mutual exclusion (a concurrent process would create
     // a fresh inode and lock it independently).
     assert!(filename.exists(), "Lock file should be kept after release");
+}
+
+#[test]
+fn test_from_file_and_accessors() {
+    use std::io::{Read, Seek, Write};
+
+    let test_dir = TestDir::new("from-file");
+    let filename = test_dir.path("test.lock");
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&filename)
+        .unwrap();
+
+    let mut lock = FileLock::from_file(file);
+    {
+        let guard = lock.lock().unwrap();
+        // Auxiliary data can be written to the lock file while it is held.
+        guard.file().write_all(b"pid").unwrap();
+    }
+
+    let mut file = lock.into_file();
+    file.rewind().unwrap();
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
+    assert_eq!(contents, "pid");
 }

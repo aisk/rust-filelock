@@ -15,7 +15,7 @@ fn test_lock_is_not_inherited_across_exec() {
 
     if std::env::var_os(CHILD_MODE).is_some() {
         let path = std::env::var_os(LOCK_PATH).unwrap();
-        let mut lock = FileLock::new(path);
+        let mut lock = FileLock::new(path).unwrap();
         let _guard = lock.lock().unwrap();
 
         std::process::Command::new("sleep")
@@ -39,7 +39,7 @@ fn test_lock_is_not_inherited_across_exec() {
         .unwrap();
     assert!(status.success());
 
-    let mut contender = FileLock::new(&path);
+    let mut contender = FileLock::new(&path).unwrap();
     let acquired = contender.try_lock().unwrap().is_some();
     assert!(
         acquired,
@@ -57,7 +57,7 @@ fn test_concurrent_lock_access() {
 
     let holder_filename = filename.clone();
     let holder = thread::spawn(move || {
-        let mut lock = FileLock::new(holder_filename);
+        let mut lock = FileLock::new(holder_filename).unwrap();
         let guard = lock.lock().unwrap();
         holder_ready_tx.send(()).unwrap();
         release_holder_rx.recv().unwrap();
@@ -69,7 +69,7 @@ fn test_concurrent_lock_access() {
         .unwrap();
 
     let waiter = thread::spawn(move || {
-        let mut lock = FileLock::new(filename);
+        let mut lock = FileLock::new(filename).unwrap();
         let _guard = lock.lock().unwrap();
         waiter_acquired_tx.send(()).unwrap();
     });
@@ -104,7 +104,7 @@ fn test_exclusive_access_across_threads() {
         let counter_clone = concurrent_counter.clone();
         let filename = filename.clone();
         let handle = thread::spawn(move || {
-            let mut lock = FileLock::new(filename);
+            let mut lock = FileLock::new(filename).unwrap();
             let _guard = lock.lock().unwrap();
 
             let previous = counter_clone.fetch_add(1, Ordering::SeqCst);
@@ -137,7 +137,7 @@ fn test_try_lock_returns_immediately_when_held() {
     let (release_holder_tx, release_holder_rx) = mpsc::channel();
     let holder_filename = filename.clone();
     let holder = thread::spawn(move || {
-        let mut lock = FileLock::new(holder_filename);
+        let mut lock = FileLock::new(holder_filename).unwrap();
         let _guard = lock.lock().unwrap();
         holder_ready_tx.send(()).unwrap();
         release_holder_rx.recv().unwrap();
@@ -150,7 +150,7 @@ fn test_try_lock_returns_immediately_when_held() {
     let (result_tx, result_rx) = mpsc::channel();
     let contender_filename = filename.clone();
     let contender = thread::spawn(move || {
-        let mut lock = FileLock::new(contender_filename);
+        let mut lock = FileLock::new(contender_filename).unwrap();
         let unavailable = lock.try_lock().unwrap().is_none();
         result_tx.send(unavailable).unwrap();
     });
@@ -162,6 +162,6 @@ fn test_try_lock_returns_immediately_when_held() {
 
     assert!(result.unwrap(), "try_lock blocked on a held lock");
 
-    let mut available = FileLock::new(filename);
+    let mut available = FileLock::new(filename).unwrap();
     assert!(available.try_lock().unwrap().is_some());
 }

@@ -2,7 +2,7 @@
 
 [![Rust](https://github.com/aisk/rust-filelock/actions/workflows/ci.yml/badge.svg)](https://github.com/aisk/rust-filelock/actions/workflows/ci.yml)
 
-Simple filelock library for rust, using `flock` on Unix-like systems and `LockFileEx` on Windows under the hood.
+Simple filelock library for rust, built on the standard library's file locking support (`std::fs::File::lock` and friends, stable since Rust 1.89). The standard library uses `flock` (or `fcntl` where `flock` is unavailable) on Unix-like systems and `LockFileEx` on Windows.
 
 ![](https://repository-images.githubusercontent.com/403675076/cd5f3635-33cf-4905-8315-1e7aee048c0d)
 
@@ -20,7 +20,7 @@ $ cargo add filelock
 use filelock;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut lock = filelock::new("myfile.lock");
+    let mut lock = filelock::new("myfile.lock")?;
     let _guard = lock.lock()?;
 
     // Perform critical operations
@@ -30,13 +30,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+`filelock::new` opens (and creates if missing) the lock file, and the file
+stays open for the lifetime of the `FileLock`, so repeated lock/unlock cycles
+reuse the same file descriptor or handle.
+
+To attempt locking without waiting, or to take a shared (read) lock that
+multiple holders can share while excluding exclusive locks:
+
+```rust
+let mut lock = filelock::new("myfile.lock")?;
+
+if let Some(_guard) = lock.try_lock()? {
+    // The exclusive lock was acquired.
+}
+
+let _guard = lock.lock_shared()?;
+// try_lock_shared() is also available.
+```
+
 For manual control:
 
 ```rust
 use filelock;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut lock = filelock::new("myfile.lock");
+    let mut lock = filelock::new("myfile.lock")?;
     let guard = lock.lock()?;
 
     // Perform critical operations
@@ -47,6 +65,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+An already-open `std::fs::File` can also be locked via
+`FileLock::from_file(file)`, and the underlying file is accessible through
+`FileLockGuard::file()` while the lock is held (for example to store the
+holder's process id in the lock file).
 
 ### Tokio
 
@@ -73,21 +96,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`lock_async()` uses non-blocking lock attempts and asynchronous, bounded
-backoff, so lock contention does not park a Tokio runtime worker. It can be
-used with `tokio::time::timeout` or `tokio::select!`, and cancelling the wait
-does not leave a blocking task running in the background. Each attempt still
-uses an ordinary synchronous filesystem call to open the lock file; that call
-may itself block on a slow or remote filesystem. Do not call the synchronous
-`lock()` from a Tokio runtime worker when the lock may be contended.
+`lock_async()` (and `lock_shared_async()`) use non-blocking lock attempts and
+asynchronous, bounded backoff, so lock contention does not park a Tokio
+runtime worker. They can be used with `tokio::time::timeout` or
+`tokio::select!`, and cancelling the wait does not leave a blocking task
+running in the background. Do not call the synchronous `lock()` from a Tokio
+runtime worker when the lock may be contended.
 
 Errors are reported as `filelock::Error`. The error identifies which operation failed and exposes both a portable `std::io::ErrorKind` and, when available, the platform-specific error code:
 
 ```rust
 use filelock::{ErrorOperation, FileLock};
 
-let mut lock = FileLock::new("missing/directory/myfile.lock");
-if let Err(error) = lock.lock() {
+if let Err(error) = FileLock::new("missing/directory/myfile.lock") {
     assert_eq!(error.operation(), ErrorOperation::Open);
     eprintln!("{} ({:?})", error, error.kind());
 }
@@ -96,10 +117,14 @@ if let Err(error) = lock.lock() {
 ## Platform behavior
 
 - Every participant must use this locking protocol and resolve the same stable lock-file path. Do not delete, rename, or replace the lock file while participants may be running; doing so can let processes lock different underlying files.
-- Unix uses advisory `flock` locks. Uncooperative processes can still access the lock file, and a process must not `fork` while holding a guard and then let both parent and child continue through the protected critical section.
-- Unix lock files are opened read-write and created with mode `0644` before applying the process umask. Cross-user locking therefore requires permissions to be arranged explicitly.
-- Windows uses an exclusive byte-range lock. It prevents ordinary reads and writes to the locked range by other processes, but does not prevent access through memory-mapped views.
+- Locks are advisory and associated with the opened file, not its path. Uncooperative processes can still access the lock file, and a process must not `fork` while holding a guard and then let both parent and child continue through the protected critical section.
+- Lock files are opened read-write and, on Unix, created with mode `0644` before applying the process umask. Cross-user locking therefore requires permissions to be arranged explicitly.
+- Interactions between file locks and ordinary reads and writes by non-lockholders are platform specific; see the `std::fs::File::lock` documentation for details.
 - Network filesystem behavior depends on the operating system, filesystem, mount options, and server. Validate the required semantics before using a lock file on NFS, SMB, or another remote filesystem.
+
+## Minimum supported Rust version
+
+Rust 1.89, which stabilized `std`'s file locking APIs.
 
 ## Documentation
 

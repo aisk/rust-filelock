@@ -2,6 +2,7 @@
 name = "filelock"
 version = "0.6.0"
 edition = "2024"
+rust-version = "1.89"
 description = "Cross-platform file locking library for Rust"
 authors = ["AN Long<aisk1988@gmail.com>"]
 repository = "https://github.com/aisk/rust-filelock"
@@ -18,9 +19,3 @@ tokio = { version = "1", optional = true, features = ["time"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "sync", "time"] }
-
-[target.'cfg(windows)'.dependencies]
-winapi = { version = "^0.3", features = ["handleapi", "fileapi", "winerror"] }
-
-[target.'cfg(unix)'.dependencies]
-libc = "^0.2"

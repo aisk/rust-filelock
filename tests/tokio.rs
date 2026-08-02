@@ -14,7 +14,7 @@ fn hold_lock(path: std::path::PathBuf) -> (mpsc::Sender<()>, thread::JoinHandle<
     let (ready_tx, ready_rx) = mpsc::channel();
     let (release_tx, release_rx) = mpsc::channel();
     let holder = thread::spawn(move || {
-        let mut lock = FileLock::new(path);
+        let mut lock = FileLock::new(path).unwrap();
         let _guard = lock.lock().unwrap();
         ready_tx.send(()).unwrap();
         let _ = release_rx.recv_timeout(Duration::from_secs(2));
@@ -28,7 +28,7 @@ async fn async_lock_yields_while_contended() {
     let test_dir = TestDir::new("tokio-yields");
     let path = test_dir.path("test.lock");
     let (release_holder, holder) = hold_lock(path.clone());
-    let mut contender = FileLock::new(path);
+    let mut contender = FileLock::new(path).unwrap();
 
     let started = Instant::now();
     let result = tokio::time::timeout(Duration::from_millis(30), contender.lock_async()).await;
@@ -47,7 +47,7 @@ async fn async_lock_acquires_after_release() {
     let test_dir = TestDir::new("tokio-acquire");
     let path = test_dir.path("test.lock");
     let (release_holder, holder) = hold_lock(path.clone());
-    let mut contender = FileLock::new(path);
+    let mut contender = FileLock::new(path).unwrap();
     let release = async move {
         tokio::time::sleep(Duration::from_millis(30)).await;
         release_holder.send(()).unwrap();
@@ -68,7 +68,7 @@ async fn cancelled_async_lock_does_not_acquire_later() {
     let (release_holder, holder) = hold_lock(path.clone());
     let waiter_path = path.clone();
     let waiter = tokio::spawn(async move {
-        let mut lock = FileLock::new(waiter_path);
+        let mut lock = FileLock::new(waiter_path).unwrap();
         let _guard = lock.lock_async().await.unwrap();
     });
 
@@ -78,7 +78,7 @@ async fn cancelled_async_lock_does_not_acquire_later() {
     release_holder.send(()).unwrap();
     holder.join().unwrap();
 
-    let mut contender = FileLock::new(path);
+    let mut contender = FileLock::new(path).unwrap();
     let _guard = contender
         .try_lock()
         .unwrap()
@@ -92,14 +92,14 @@ async fn aborting_a_lock_holder_releases_the_lock() {
     let holder_path = path.clone();
     let (acquired_tx, acquired_rx) = tokio::sync::oneshot::channel();
     let holder = tokio::spawn(async move {
-        let mut lock = FileLock::new(holder_path);
+        let mut lock = FileLock::new(holder_path).unwrap();
         let _guard = lock.lock_async().await.unwrap();
         acquired_tx.send(()).unwrap();
         std::future::pending::<()>().await;
     });
 
     acquired_rx.await.unwrap();
-    let mut contender = FileLock::new(path);
+    let mut contender = FileLock::new(path).unwrap();
     assert!(contender.try_lock().unwrap().is_none());
 
     holder.abort();
@@ -123,7 +123,7 @@ async fn multiple_async_waiters_remain_exclusive_and_make_progress() {
         let inside = Arc::clone(&inside);
         let completed = Arc::clone(&completed);
         waiters.push(tokio::spawn(async move {
-            let mut lock = FileLock::new(waiter_path);
+            let mut lock = FileLock::new(waiter_path).unwrap();
             let _guard = lock.lock_async().await.unwrap();
             assert_eq!(inside.fetch_add(1, Ordering::SeqCst), 0);
             tokio::time::sleep(Duration::from_millis(5)).await;

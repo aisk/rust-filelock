@@ -18,6 +18,14 @@ impl<'a> FileLockGuard<'a> {
         }
     }
 
+    /// Returns a reference to the underlying lock file.
+    ///
+    /// This can be used to read or write auxiliary data stored in the lock
+    /// file, such as the holder's process id, while the lock is held.
+    pub fn file(&self) -> &std::fs::File {
+        self.lock.file()
+    }
+
     /// Manually unlocks the file lock.
     ///
     /// This method consumes the guard and returns a result indicating whether
@@ -28,7 +36,7 @@ impl<'a> FileLockGuard<'a> {
     /// ```no_run
     /// use filelock::FileLock;
     ///
-    /// let mut lock = FileLock::new("myfile.lock");
+    /// let mut lock = FileLock::new("myfile.lock").unwrap();
     /// let guard = lock.lock().unwrap();
     ///
     /// // Perform critical operations

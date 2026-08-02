@@ -9,26 +9,27 @@ fn test_open_error_recovery() {
     let directory = test_dir.path("missing");
     let filename = directory.join("test.lock");
 
-    let mut lock = FileLock::new(&filename);
-    let error = match lock.lock() {
+    let error = match FileLock::new(&filename) {
         Err(error) => error,
-        Ok(_) => panic!("locking in a missing directory unexpectedly succeeded"),
+        Ok(_) => panic!("opening a lock file in a missing directory unexpectedly succeeded"),
     };
     assert_eq!(error.operation(), ErrorOperation::Open);
 
     std::fs::create_dir(&directory).unwrap();
+    let mut lock = FileLock::new(&filename).unwrap();
     lock.lock().unwrap().unlock().unwrap();
 }
 
 #[test]
-fn test_invalid_path_locking() {
+fn test_invalid_path_open() {
     let test_dir = TestDir::new("invalid-path");
     let parent = test_dir.path("not-a-directory");
     std::fs::write(&parent, b"file").unwrap();
-    let mut lock = FileLock::new(parent.join("test.lock"));
-    let result = lock.lock();
-    assert!(result.is_err(), "Locking on invalid path should fail");
-    let error = result.err().unwrap();
+    let result = FileLock::new(parent.join("test.lock"));
+    let error = match result {
+        Err(error) => error,
+        Ok(_) => panic!("opening a lock file under a regular file unexpectedly succeeded"),
+    };
     assert_eq!(error.operation(), ErrorOperation::Open);
     assert!(std::error::Error::source(&error).is_some());
     assert!(error.to_string().starts_with("failed to open lock file:"));
@@ -40,10 +41,7 @@ fn test_path_with_interior_nul_returns_error() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
 
-    let mut lock = FileLock::new(OsStr::from_bytes(b"invalid\0path.lock"));
-    let result = lock.lock();
-
-    let error = match result {
+    let error = match FileLock::new(OsStr::from_bytes(b"invalid\0path.lock")) {
         Err(error) => error,
         Ok(_) => panic!("path containing NUL unexpectedly succeeded"),
     };
@@ -64,8 +62,7 @@ fn test_path_with_interior_nul_returns_error() {
     path.push(0);
     path.extend("ignored".encode_utf16());
 
-    let mut lock = FileLock::new(std::ffi::OsString::from_wide(&path));
-    let error = match lock.lock() {
+    let error = match FileLock::new(std::ffi::OsString::from_wide(&path)) {
         Err(error) => error,
         Ok(_) => panic!("path containing NUL unexpectedly succeeded"),
     };
@@ -91,13 +88,10 @@ fn test_file_permission_denied() {
     File::create(&filename).unwrap();
     std::fs::set_permissions(&filename, std::fs::Permissions::from_mode(0o000)).unwrap();
 
-    let mut lock = FileLock::new(&filename);
-    let denied = match lock.lock() {
+    let denied = match FileLock::new(&filename) {
         Err(error) => Some(error.operation()),
-        Ok(guard) => {
-            drop(guard);
-            None
-        }
+        // Root (or a capable process) may open the file regardless.
+        Ok(_) => None,
     };
 
     std::fs::set_permissions(&filename, std::fs::Permissions::from_mode(0o644)).unwrap();
@@ -109,7 +103,7 @@ fn test_file_permission_denied() {
 #[test]
 fn test_error_recovery() {
     let test_dir = TestDir::new("error-recovery");
-    let mut lock = FileLock::new(test_dir.path("test.lock"));
+    let mut lock = FileLock::new(test_dir.path("test.lock")).unwrap();
 
     // First successful lock
     let guard1 = lock.lock().unwrap();

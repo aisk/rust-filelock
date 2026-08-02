@@ -11,8 +11,6 @@ pub enum ErrorOperation {
     Lock,
     /// Releasing the file lock.
     Unlock,
-    /// Closing the lock file after use.
-    Close,
 }
 
 impl fmt::Display for ErrorOperation {
@@ -21,7 +19,6 @@ impl fmt::Display for ErrorOperation {
             Self::Open => "open lock file",
             Self::Lock => "acquire file lock",
             Self::Unlock => "release file lock",
-            Self::Close => "close lock file",
         })
     }
 }

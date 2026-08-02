@@ -50,7 +50,7 @@ fn test_exclusive_lock_across_processes() {
         panic!("holder process did not acquire the file lock");
     }
 
-    let mut contender = FileLock::new(&path);
+    let mut contender = FileLock::new(&path).unwrap();
     let unavailable_while_held = contender.try_lock().unwrap().is_none();
 
     writeln!(holder.stdin.take().unwrap(), "RELEASE").unwrap();
@@ -71,7 +71,7 @@ fn test_exclusive_lock_across_processes() {
 
 fn run_holder_process() {
     let path = std::env::var_os(LOCK_PATH).unwrap();
-    let mut lock = FileLock::new(path);
+    let mut lock = FileLock::new(path).unwrap();
     let _guard = lock.lock().unwrap();
 
     println!("LOCKED");
